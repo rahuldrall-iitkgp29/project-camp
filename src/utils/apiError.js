@@ -8,6 +8,9 @@ class ApiError extends Error {
   ) 
   {
     super(meassage);
+    //super means call the constructor of parent class , in our case its Error
+    // bcz ApiError extends Error means ApiError is a child of error who iheritate all the functinality of parent class (Error) with his own abilitys
+    // later we store that in message using this.message
     this.statusCode = statusCode;
     this.data = null;
     this.success = false;
