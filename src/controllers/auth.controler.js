@@ -3,8 +3,6 @@ import { ApiRespones} from "../utils/apiResponse.js"
 import { ApiError } from "../utils/apiError.js"
 import { asyncHandler } from "../utils/asyncHandler.js"
 import {emailVerficationMailgenContent, forgotPasswordMailgenContent, sendingEmail} from "../utils/mail.utils.js"
-import { log } from "console";
-import user from "../models/user.models.js";
 import jwt from "jsonwebtoken"
 import crypto from "crypto";
 
@@ -210,7 +208,7 @@ const verifyEmail = asyncHandler(async(req,res)=>{//verification of sended token
 const resendEmailVerification = asyncHandler(async(req,res)=>{
     const user = await User.findById(req.user?._id)
 
-    if(!user){//we need user to login first to resend token
+    if(!user){//we need user to register first to resend token
         throw new ApiError(404,"user does not exist")
     }
     if(user.isEmailVerified){
