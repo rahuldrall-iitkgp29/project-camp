@@ -48,6 +48,10 @@ const userSchema = new Schema(
     refreshToken: {
       type: String,
     },
+    tokenVersion: {
+      type: Number,
+      default: 0,
+    },
     forgotPasswordToken: {
       type: String,
     },
@@ -87,6 +91,7 @@ userSchema.methods.generateAccessToken = function () {
       _id: this._id, //id is gen by mongodb
       email: this.email,
       username: this.username,
+      tokenVersion: this.tokenVersion ?? 0,
     },
     process.env.ACCESS_TOKEN_SECRET, //this is method in which token gen
     { expiresIn: process.env.ACCESS_TOKEN_EXPIRY },
@@ -98,9 +103,10 @@ userSchema.methods.generateRefreshToken = function () {
     // payload
     {
       _id: this._id,
+      tokenVersion: this.tokenVersion ?? 0,
     },
     process.env.REFRESH_TOKEN_SECRET,
-    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY },
+    { expiresIn: process.env.REFRESH_TOKEN_EXPIRY, jwtid: crypto.randomUUID() },
   );
 };
 

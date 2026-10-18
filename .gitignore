@@ -5,3 +5,5 @@ commands.md
 *:Zone.Identifier
 defination.txt
 test-eval.js
+public/images/*
+!public/images/gitkeep

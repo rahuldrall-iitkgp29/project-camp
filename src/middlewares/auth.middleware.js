@@ -14,23 +14,36 @@ export const verifyJWT = asyncHandler(async(req,res,next)=>{
     //if i got cokkie then access access token from it or from bearer tokens and replace it from bearer to nothing and then give it back
 
 
-    if(!token){
+    if(typeof token !== "string" || !token){
         throw new ApiError(401,"unauthorized request")
     }
 
+    let decodedToken;
     try {
-        const decodedToken = jwt.verify(token , process.env.ACCESS_TOKEN_SECRET) //just pass uncoded token and secret of decode , and jwt will decode it
-        const user = await User.findById(decodedToken?._id).select("-password -refreshToken -emailVerficationToken -emailVerficationTokenExpiry")
-        //find this user by id bcz we store id inside token then give only selected info to us
-        if(!user){//means no user found with that id
-            throw new ApiError(401,"Invalid access token")
-        }
-        req.user = user //we create new property inside req and store user inside it
-        next()
+        decodedToken = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, { algorithms: ["HS256"] });
     } catch (error) {
         throw new ApiError(401,"Invalid access token")
     }
+    if (!mongoose.isObjectIdOrHexString(decodedToken?._id)) {
+        throw new ApiError(401, "Invalid access token");
+    }
+    const user = await User.findById(decodedToken._id).select(
+        "-password -refreshToken -emailVerficationToken -emailVerficationTokenExpiry -forgotPasswordToken -forgotPasswordTokenExpiry -__v -avatar.localPath"
+    );
+    if (!user || (decodedToken.tokenVersion ?? 0) !== (user.tokenVersion ?? 0)) {
+        throw new ApiError(401, "Invalid access token");
+    }
+    req.user = user.toObject();
+    delete req.user.tokenVersion;
+    next();
 })
+
+export const requireVerifiedEmail = (req, res, next) => {
+    if (!req.user?.isEmailVerified) {
+        throw new ApiError(403, "Verify your email before accessing projects");
+    }
+    next();
+};
 
 //writting middleware for our project controllers
 //means diff user with diff role have diff access of doing things like deleting , adding , mark done ,etc 
@@ -42,6 +55,9 @@ export const validateProjectPermission = (roles = []) => { //we accept roles as 
         if(!projectId){
             throw new ApiError(400,"project id is missing")
         }
+        if (!mongoose.isObjectIdOrHexString(projectId)) {
+            throw new ApiError(400, "Invalid project id");
+        }
 
         const project = await ProjectMember.findOne({
           project: new mongoose.Types.ObjectId(projectId),
@@ -49,7 +65,7 @@ export const validateProjectPermission = (roles = []) => { //we accept roles as 
         });
 
         if (!project) {
-          throw new ApiError(400, "project not found");
+          throw new ApiError(403, "You are not a member of this project");
         }
 
         const givenRole = project?.role 

@@ -5,7 +5,7 @@ import { ApiError } from "../utils/apiError.js";
 
 export const validate = (req , res , next)=>{
     const errors = validationResult(req) // this is a custom validtore which pass our req and throw an string of all error
-    if(errors.isEmpty){//if string is empty means no error
+    if(errors.isEmpty()){//if string is empty means no error
         return next()
     }
     const extractedErrors = []

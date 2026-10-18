@@ -9,6 +9,7 @@ import {
   updateProject,
   deleteProject,
   updateMemberRole,
+  acceptProjectInvitation,
 } from "../controllers/project.controlers.js";
 
 import { validate } from "../middlewares/validtor.middleware.js";
@@ -16,17 +17,25 @@ import { validate } from "../middlewares/validtor.middleware.js";
 import {
   createProjectValidator,
   addMemberToProjectValidator,
+  updateProjectValidator,
+  updateMemberRoleValidator,
+  validateIds,
+  invitationValidator,
 } from "../validators/index.validatorts.js";
 
 import {
   verifyJWT,
+  requireVerifiedEmail,
   validateProjectPermission,
 } from "../middlewares/auth.middleware.js";
 import { AvailableUserRole, UserRolesEnum } from "../utils/constants.js";
 
 const router = Router();
 
-router.use(verifyJWT) //means whatever i write after this line has verifyJWT validator by default -> who verify that is authentication done or not
+router.use(verifyJWT, requireVerifiedEmail) // Project access requires an authenticated, verified account.
+
+router.route("/:projectId/invitations/:invitationToken/accept")
+    .post(validateIds("projectId"), invitationValidator(), validate, acceptProjectInvitation);
 
 router //to create project
     .route("/")
@@ -38,7 +47,7 @@ router // to upadate and delete project
   .get(validateProjectPermission(AvailableUserRole),getProjectById) //availableuserRole -> is the array which contain all the roles => passing this means evryone allow to access getPeojectId contoroller
   .put(
     validateProjectPermission([UserRolesEnum.ADMIN]), //similar to ["ADMIN"]
-    createProjectValidator(),
+    updateProjectValidator(),
     validate,
     updateProject
   )
@@ -48,8 +57,8 @@ router // to upadate and delete project
   )
 
 router //to add member
-    .route("/:projectId/member") //whatever right in : take in params(order not matter)
-    .get(getsProjectMembers)
+    .route(["/:projectId/members", "/:projectId/member"]) // Keep the singular legacy alias.
+    .get(validateProjectPermission(AvailableUserRole), getsProjectMembers)
     .post(
         validateProjectPermission([UserRolesEnum.ADMIN]),
         addMemberToProjectValidator(),
@@ -60,10 +69,13 @@ router //to add member
 router
     .route("/:projectId/members/:userId")
     .put(
+        validateIds("projectId", "userId"),
         validateProjectPermission([UserRolesEnum.ADMIN]),
+        updateMemberRoleValidator(), validate,
         updateMemberRole
     )
     .delete(
+        validateIds("projectId", "userId"),
         validateProjectPermission([UserRolesEnum.ADMIN]),
         deleteMember
     )

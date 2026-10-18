@@ -5,7 +5,7 @@ import {AvailableUserRole , UserRolesEnum} from "../utils/constants.js"
 const projectMemberSchema = new Schema({
     user : {
         type : Schema.Types.ObjectId,
-        ref : "User",
+        ref : "user",
         required : true, 
     },
     project : {
@@ -20,4 +20,6 @@ const projectMemberSchema = new Schema({
     }
 },{timestamps:true})
 
+projectMemberSchema.index({ project: 1, user: 1 }, { unique: true });
+projectMemberSchema.index({ user: 1, project: 1 });
 export const ProjectMember = mongoose.model("ProjectMember" , projectMemberSchema);

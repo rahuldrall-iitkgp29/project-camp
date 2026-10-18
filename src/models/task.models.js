@@ -1,7 +1,6 @@
 import mongoose, { Schema } from "mongoose"; 
 
 import {AvailableTaskStatus , TaskStatusEnum} from "../utils/constants.js";
-import mimeTypes from "nodemailer/lib/mime-funcs/mime-types.js";
 
 const taskSchema = new Schema({
     title : {
@@ -17,11 +16,11 @@ const taskSchema = new Schema({
     },
     assignedTo : {
         type : Schema.Types.ObjectId,
-        ref : "User",
+        ref : "user",
     },
     assignedBy : {
         type : Schema.Types.ObjectId,
-        ref : "User",
+        ref : "user",
     },
     status : {
         type : String,
@@ -40,4 +39,5 @@ const taskSchema = new Schema({
     {timestamps : true},
 )
 
+taskSchema.index({ project: 1, assignedTo: 1 });
 export const Task = mongoose.model("Task",taskSchema);

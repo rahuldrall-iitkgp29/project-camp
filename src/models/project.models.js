@@ -12,7 +12,7 @@ const projectSchema = new Schema({
     },
     createdBy : {
         type : Schema.Types.ObjectId,
-        ref : "User", //we refer this in user models also 
+        ref : "user", // Registered model name; preserve the existing collection.
         required : true,
     }
 } , {timestamps : true})

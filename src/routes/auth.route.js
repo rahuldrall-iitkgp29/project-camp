@@ -27,8 +27,10 @@ import
 from "../validators/index.validatorts.js";
 
 import { verifyJWT } from "../middlewares/auth.middleware.js";
+import { createRateLimiter } from "../middlewares/rateLimit.middleware.js";
 
 const router = Router();
+router.use(createRateLimiter());
 
 //unsecured routes
 router.route("/register").post( userRegistrationValidator(), validate, registerUser);
@@ -51,7 +53,7 @@ router.route("/reset-password/:resetToken").post(userRestForgotPasswordValidator
 //secure route-> required varify jwt
 router.route("/logout").post(verifyJWT , logoutUser );
 router.route("/current-user").get(verifyJWT, getCurrentUser);
-router.route("/change-password").post(verifyJWT, userChanggedCurrentPasswordValidator, validate, changeCurrentPassword);
+router.route("/change-password").post(verifyJWT, userChanggedCurrentPasswordValidator(), validate, changeCurrentPassword);
 router.route("/resend-email-verification").post(verifyJWT , resendEmailVerification);
 
 

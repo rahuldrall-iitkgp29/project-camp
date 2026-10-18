@@ -8,7 +8,7 @@ const projectNotedSchema = new Schema({
     },
     createdBy : {
         type : Schema.Types.ObjectId,
-        ref : "User",
+        ref : "user",
         required : true
     },
     content : {
@@ -17,4 +17,5 @@ const projectNotedSchema = new Schema({
     }
 } , {timestamps : true});
 
+projectNotedSchema.index({ project: 1 });
 export const ProjectNote = mongoose.model("ProjectNote" , projectNotedSchema)

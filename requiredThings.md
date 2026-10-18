@@ -1,5 +1,7 @@
 # Project Audit & Required Fixes
 
+> Historical notes, superseded by [task.md](task.md) and [history.md](history.md) on 2026-10-17. The completion percentages and current-state claims below describe an earlier, unverified assessment. All 33 PRD routes are now registered and exercised by isolated tests; live MongoDB/SMTP verification is still outstanding. Retained for historical context.
+
 This document is a technical audit of the project based on the PRD and current implementation.
 
 ---
