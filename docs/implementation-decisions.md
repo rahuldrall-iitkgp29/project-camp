@@ -4,7 +4,7 @@ The current user authorized the full backend repair and made these decisions:
 
 - Verified users can create projects and receive that project's `admin` membership. Roles remain per project; no global role or client-selected privilege is introduced. This resolves the PRD's project-creation ambiguity without changing `PRD.md`.
 - Adding someone by email now sends an invitation requiring acceptance, including for people who have not registered yet. POST member collection requests retain their paths and fields but return pending invitation information rather than immediately granting access. Existing members use PUT to change roles. This behavior change is explicitly authorized; existing memberships are retained.
-- No isolated MongoDB replica set is configured. Run isolated mocks; actual database integration and concurrency remain release checks.
+- Updated 2026-10-18: project-local MongoDB 8.0.34 runs as rs0 PRIMARY. Guarded integration tests use pcb_test; the explicit dev:local launcher uses separate pcb_development without changing .env MONGO_URI. Core real-persistence lifecycle/race tests pass; broader failover/recovery remains a release check.
 
 ## Integrity and deployment
 

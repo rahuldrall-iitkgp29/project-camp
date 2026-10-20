@@ -13,9 +13,16 @@
   "main": "src/index.js",
   "scripts": {
     "dev": "nodemon ./src/index.js",
+    "dev:local": "node scripts/dev-local.js",
     "start": "node src/index.js",
-    "test": "node --test tests/*.test.js",
-    "test:integration": "node --test tests/integration.test.js"
+    "test": "node --test tests/auth.test.js tests/contracts.test.js tests/project.test.js tests/mongodb-safety.test.js",
+    "test:unit": "npm test",
+    "test:integration": "node --test tests/integration.test.js",
+    "mongodb:install": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Install",
+    "mongodb:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Start",
+    "mongodb:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Status",
+    "mongodb:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Stop",
+    "mongodb:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Smoke"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",

@@ -1,621 +1,293 @@
 # PCB project history and Codex handoff
 
-## Current handoff — full backend implementation, 2026-10-18
+## Current implementation — 2026-10-18
 
-This session read history.md, task.md, the entire unchanged uppercase PRD.md, README.md, requiredThings.md and package/configuration before editing, then inspected every source module, tests, Git state and repository instructions. No applicable AGENTS.md was found. The work resumed on October 18 to complete documentation and final verification.
+The user authorized fixing the blockers from the preceding read-only audit. **E01 and B31–B33 are resolved and verified.** Core APIs and real persistence now support controlled local frontend integration; actual browser sign-off and production gates remain open. Baseline: **master**, commit **d26480cfabc1794f13a65ace77be0ede78d27c13**, plus preserved pre-existing changes.
 
-**Current result:** all 33 PRD method/path contracts are mounted; one additional invitation-acceptance endpoint and two legacy member aliases are available. The most recent suite reports **50 passed, 0 failed, 1 skipped**. The skipped test is the real MongoDB integration fixture: the user explicitly confirmed no isolated replica set is available. The app imports without connecting to MongoDB or starting the production entry point.
+**Final results: 57 unit/mocked passed; 6 integration passed; zero failures/skips.** Integration is one guarded parent fixture plus five lifecycle subtests. All **44 JavaScript files** (34 application + tests/scripts) and the existing PowerShell script parse. Actual .env validation, disconnected app import and normal src/index.js startup via the new explicit local launcher passed.
 
-The 64 task.md checkpoints now read **59 PASS, 5 PARTIAL, 0 FAIL, 0 UNVERIFIED**. PASS describes the narrow source/isolated request contract and inherits the live-database/SMTP limitation. Partial items are R02/R44/R58/R59/R63: operational authentication/reset security, system lifecycle validation and real email delivery. This is not a declaration of full production compliance.
+Local MongoDB remains Community **8.0.34**, **rs0 PRIMARY**, only **127.0.0.1:27018**, PID **12456** at verification. Tests still use **pcb_test** exclusively. The new **pcb_development** database is separate; the local launcher overrides MONGO_URI only in its process. The original non-local .env MONGO_URI and MONGODB_TEST_URI values are preserved. No Atlas or real SMTP connection was made.
 
-### Starting state and preservation
+Current PRD register: **60 PASS / 4 PARTIAL / 0 FAIL / 0 UNVERIFIED** across 64 checkpoints; endpoint subset **32 PASS / 1 PARTIAL**, all 33 mounted. Remaining PARTIAL checkpoints concern operational authentication/security and real delivery, not absent handlers. These counts are not a completion percentage or production certification.
 
-At the start of this session, package.json and 11 source files were already modified; history.md, task.md and tests/auth.test.js were untracked from the previous authorized authentication implementation. Those changes were preserved. No commit, reset, checkout, merge, migration, dependency install, .env edit or production service operation was performed.
+The user selected **http://localhost:5173**, **/reset-password/:token**, and **/invitations/:projectId/:token** for local frontend integration. Read [docs/frontend-integration.md](docs/frontend-integration.md) for startup, cookies/tokens, links, errors and upload contracts. README.md remains absent/staged deleted; it was not restored. Existing product decisions and all controller/route/model/field names remain unchanged.
 
-The previous authentication patch resolved 17 B-series findings. This session resolved the remaining original B06/B17–B22/B25–B27 and added/fixed B28 (SMTP recipient acceptance), B29 (internal profile fields) and B30 (project field/update validation). Historical descriptions below refer to older states; current task.md resolution notes and this handoff take precedence.
+### Changes and rationale
 
-### Explicit product decisions
+- **E01:** generated two independent 48-byte cryptographic secrets locally; changed only the authorized secret/URL/CORS keys and added PROJECT_INVITATION_REDIRECT_URL. SERVER_URL matches the existing PORT. The validator is unchanged and passes; unrelated environment values and both database URI values were checked unchanged. No secret values belong in documentation/output/Git.
+- **B31:** app.js records parser-origin errors and maps installed body-parser/zlib client failures narrowly: malformed JSON/compression 400, unsupported charset/encoding 415, limits 413. Unexpected internal errors remain sanitized 500 even when carrying a zlib-like code. Brotli format errors are distinguished from allocation/internal errors. CORS now precedes parsing so the approved frontend can read these errors.
+- **B32:** verifyJWT parses a complete case-insensitive Bearer scheme/token boundary. Missing/wrong schemes, tabs/embedded whitespace and comma-separated tokens reject. Nonempty access-cookie precedence, JWT algorithm/expiry/version checks and refresh protections are preserved.
+- **B33:** mail acceptance uses canonical IDNA domain identity plus equivalent local-part quoting, retaining local-part case and stored email policy. Tests use installed MailComposer's actual envelope normalization, including Unicode and quoted addresses; wrong mailbox/case, empty accepted lists and SMTP exceptions still yield 502.
+- **Integration:** extended the existing guarded fixture rather than adding a framework. Five named real lifecycle subtests cover onboarding, invitations, all roles, resources/files, rollback and session recovery. Multer filename capture identifies fixture-owned files for precise cleanup.
+- **Local startup:** scripts/dev-local.js validates local configuration and the existing project replica set before importing the normal entrypoint. Its explicit process-only database override avoids the retained non-local URI. --check performs only configuration/topology verification.
 
-- Verified users can create projects and become the new project's Admin. Roles remain scoped to ProjectMember; there is no global Admin override.
-- Invitations must be accepted, including by new users. POST /members and its /member alias now return a pending invitation, not immediate membership. This behavioral change was explicitly authorized. Existing members use PUT for role changes.
-- Keep account actions usable before verification; require verified email for project/task/subtask/note and invitation acceptance.
-- No isolated database is configured; run mocks and record the limitation.
+No dependency was added/upgraded, no PRD change, no production migration/deployment and no MongoDB download/reset/reconfiguration occurred.
 
-These decisions and transaction/storage compatibility implications were documented before implementation in [docs/implementation-decisions.md](docs/implementation-decisions.md). PRD.md was not edited. Last-Admin protection and clearing assignments on member removal implement the safe integrity behavior; historical author references remain.
+## Project and important modules
 
-### Architecture and module responsibilities
+PCB is a project collaboration REST backend: accounts, project memberships and roles, tasks/subtasks, notes and public task attachments. Package name remains `project-mangement`, ES modules, version 1.0.0. Tested runtime: Node **24.14.0**, npm **11.9.0**. Installed stack includes Express **5.2.1**, Mongoose **9.7.3** (MongoDB driver **7.2.0**), bcrypt, jsonwebtoken, express-validator, Multer, Nodemailer/Mailgen, cookie-parser, CORS and dotenv. Installed dependency metadata requires Node at least **20.19.0**. Dependencies and lockfile were not changed.
 
-The structure remains Express routers -> authentication/role/input middleware -> existing controllers -> Mongoose models -> ApiRespones, with centralized sanitized errors. New helpers support transactions, files and configuration rather than introducing a replacement application architecture.
+| Location | Responsibility |
+| --- | --- |
+| src/index.js | Loads dotenv before app evaluation, validates configuration, connects DB/initializes indexes, starts HTTP and attachment cleanup worker, handles shutdown. |
+| src/app.js | Importable Express app; parsers, cookies, Origin/CORS checks, static downloads, five route mounts, 404 and JSON error handling. Import itself opens no DB connection/listener. |
+| src/db/database.js | Application connection through MONGO_URI; requires replica set or sharded topology and successful model index initialization before serving. |
+| src/controllers/auth.controler.js | Ten account handlers, public projections, token/session lifecycle and notification flow. |
+| src/controllers/project.controlers.js | Project/member CRUD, invitations, acceptance, member counts, last-Admin and removal rules. |
+| src/controllers/task.controler.js | Five task and three subtask handlers, scoped relationships and attachment operations. |
+| src/controllers/note.controler.js; healthCheck.js | Five project-note handlers; liveness handler. |
+| src/routes/ | auth.route.js, project.route.js, task.route.js, note.route.js, healthCheck_route.js; actual methods/gates listed below. |
+| src/models/ | Eight Mongoose models described below. User is registered as lowercase user; references preserve that name. |
+| src/middlewares/ | auth.middleware.js, validtor.middleware.js, rateLimit.middleware.js, multer.middleware.js. |
+| src/validators/index.validatorts.js | Typed body, token and resource-ID validators; partial-update allowlists. |
+| src/utils/ | apiError.js, apiResponse.js, asyncHandler.js, constants.js, env.utils.js, mail.utils.js, project.utils.js, attachment.utils.js. |
+| tests/ | auth.test.js, project.test.js, contracts.test.js, mongodb-safety.test.js, integration.test.js; helpers/database.js mocks persistence; helpers/integration-lifecycle.js extends the real fixture. |
+| scripts/ | mongodb.ps1 lifecycle; mongodb-admin.js and lib/mongodb-test.js administration/isolation guard; dev-local.js explicit development launcher. |
+| public/images/ | Real public uploads; only gitkeep remained after test cleanup. |
+| tools/mongodb/; .local/ | Ignored local binaries, data, logs and runtime controls; no system service/PATH installation. |
+| docs/ | frontend-integration.md is the client/setup entrypoint; windows-mongodb.md documents the server; implementation-decisions.md preserves approved policies and updated DB status. |
 
-```text
-src/
-  app.js                     Auth, projects, tasks, notes, health mounts; parsers/CORS/static/errors
-  index.js                   dotenv, config validation, DB/index readiness, listen/cleanup/shutdown
-  controllers/
-    auth.controler.js        Ten account/session handlers, preserved
-    project.controlers.js    Projects, members, invitation sending/acceptance
-    task.controler.js        Five task and three subtask handlers, including UpdateSubTask
-    note.controler.js        NEW: five note handlers
-    healthCheck.js           Existing public liveness
-  routes/
-    auth.route.js, project.route.js, healthCheck_route.js
-    task.route.js            NEW: eight PRD task/subtask endpoints
-    note.route.js            NEW: five PRD note endpoints
-  models/
-    user.models.js, project.models.js, projectmember.models.js
-    task.models.js, subtask.models.js, note.models.js
-    projectInvitation.models.js  NEW: pending invitations, hashed tokens/expiry
-    fileDeletion.models.js       NEW: persistent file deletion jobs
-  middlewares/
-    auth.middleware.js, validtor.middleware.js, multer.middleware.js
-    rateLimit.middleware.js  NEW: bounded IP/account auth throttling
-  validators/index.validatorts.js  Existing factories plus resource/update/ID validators
-  utils/
-    existing apiError.js, apiResponse.js, asyncHandler.js, constants.js, mail.utils.js
-    project.utils.js         NEW: transaction/parent/permission helpers
-    attachment.utils.js      NEW: paths, limits, metadata, cleanup/queue
-    env.utils.js             NEW: early sanitized configuration validation
-tests/
-  auth.test.js               Extended prior HTTP suite
-  contracts.test.js          NEW: 33 mounted PRD contracts, rate/config/transaction error checks
-  project.test.js            NEW: project/task/subtask/note/invitation/upload HTTP regressions
-  helpers/database.js        NEW: collection adapter and rollback/failure fixtures
-  integration.test.js        NEW: opt-in isolated replica-set integration
+README.md was deliberately preserved as staged deleted. requiredThings.md still contains historical status that must not override measured results here; further discoverability/historical cleanup is D07.
+
+## Actual API contracts
+
+All table paths are relative to **/api/v1**. Success bodies use **{ statuscode, data, message, success }**, preserving lowercase `statuscode` and the `ApiRespones` class. The last column gives HTTP success status and input → **data** shape. Empty-body operations may omit a request body. JSON IDs/dates serialize as strings; raw resource documents may include timestamps and `__v`.
+
+**JWT** means a valid current access token; email verification is not required for account actions. **Verified JWT** also requires verified email. Every project/task/subtask/note route uses verified JWT; **Any project role** means membership in that specific project. **Admin / Project Admin** means either per-project role; Member cannot mutate tasks. All 33 route registrations are checked by tests/contracts.test.js, with HTTP behavior in the auth/project suites and selected real-persistence cases in integration.test.js.
+
+| ID | Method and path | Controller | Access | Success / request → data |
+| --- | --- | --- | --- | --- |
+| R01 | POST /auth/register | registerUser | Public | 201: email, username, password → { user } |
+| R02 | POST /auth/login | login | Public | 200: email, password → user, accessToken, refreshToken |
+| R03 | POST /auth/logout | logoutUser | JWT | 200: no body → {} and cleared cookies |
+| R04 | GET /auth/current-user | getCurrentUser | JWT | 200: → public user |
+| R05 | POST /auth/change-password | changeCurrentPassword | JWT | 200: oldPassword, newPassword → {} |
+| R06 | POST /auth/refresh-token | refreshAccessToken | Refresh cookie/body | 200: refreshToken → accessToken, refreshToken, refrershToken |
+| R07 | GET /auth/verify-email/:verficationToken | verifyEmail | Public token | 200: → isEmailVerified |
+| R08 | POST /auth/forgot-Password | forgotPasswordRequest | Public | 200: email → {} |
+| R09 | POST /auth/reset-password/:resetToken | resetForgotPassword | Public token | 200: newPassword → {} |
+| R10 | POST /auth/resend-email-verification | resendEmailVerification | JWT | 200: no body → {} |
+| R11 | GET /projects | getProjects | Verified JWT | 200: → [{ project, role }] |
+| R12 | POST /projects | createProject | Verified JWT | 201: name, optional description → Project |
+| R13 | GET /projects/:projectId | getProjectById | Any project role | 200: → Project |
+| R14 | PUT /projects/:projectId | updateProject | Admin | 200: name and/or description → Project |
+| R15 | DELETE /projects/:projectId | deleteProject | Admin | 200: → deleted Project |
+| R16 | GET /projects/:projectId/members | getsProjectMembers | Any project role | 200: → [{ project, user, role, createdAt, updatedAt }] |
+| R17 | POST /projects/:projectId/members | addMemberToProject | Admin | 201: email, role → { invitation: pending details } |
+| R18 | PUT /projects/:projectId/members/:userId | updateMemberRole | Admin | 200: newRole → ProjectMember |
+| R19 | DELETE /projects/:projectId/members/:userId | deleteMember | Admin | 200: → deleted ProjectMember |
+| R20 | GET /tasks/:projectId | getTasks | Any project role | 200: → Task[] with public assignedTo |
+| R21 | POST /tasks/:projectId | createTask | Admin / Project Admin | 201: title; optional description, assignedTo, status, attachements → Task |
+| R22 | GET /tasks/:projectId/t/:taskId | getTaskById | Any project role | 200: → Task with public assignee and subtasks/creators |
+| R23 | PUT /tasks/:projectId/t/:taskId | updateTask | Admin / Project Admin | 200: partial task fields or appended uploads → Task |
+| R24 | DELETE /tasks/:projectId/t/:taskId | deleteTask | Admin / Project Admin | 200: → deleted Task |
+| R25 | POST /tasks/:projectId/t/:taskId/subtasks | createSubTask | Admin / Project Admin | 201: title → Subtask |
+| R26 | PUT /tasks/:projectId/st/:subTaskId | UpdateSubTask | Any role: completion; privileged: title | 200: title and/or boolean isCompleted → Subtask |
+| R27 | DELETE /tasks/:projectId/st/:subTaskId | deleteSubTask | Admin / Project Admin | 200: → deleted Subtask |
+| R28 | GET /notes/:projectId | getNotes | Any project role | 200: → ProjectNote[] with public createdBy |
+| R29 | POST /notes/:projectId | createNote | Admin | 201: content → ProjectNote |
+| R30 | GET /notes/:projectId/n/:noteId | getNoteById | Any project role | 200: → ProjectNote with public createdBy |
+| R31 | PUT /notes/:projectId/n/:noteId | updateNote | Admin | 200: content → ProjectNote |
+| R32 | DELETE /notes/:projectId/n/:noteId | deleteNote | Admin | 200: → deleted ProjectNote |
+| R33 | GET /healthcheck | healthCheck | Public | 200: → { message } |
+
+Auth handlers live in auth.controler.js; project/member handlers in project.controlers.js; task/subtask handlers in task.controler.js; note handlers in note.controler.js; healthCheck in healthCheck.js.
+
+Additional registered contracts:
+
+- **POST /api/v1/projects/:projectId/invitations/:invitationToken/accept** → `acceptProjectInvitation`: verified JWT, matching recipient email and unexpired invitation token; existing membership is not required. Returns 200 with ProjectMember.
+- **GET and POST /api/v1/projects/:projectId/member** retain the singular legacy aliases with the same permissions/behavior as plural /members.
+- **GET /** returns the existing text placeholder. It is not a PRD endpoint.
+- Preserve `forgot-Password`, `verficationToken`, `UpdateSubTask`, `attachements`, `mimeTypes` and `refrershToken`. Express default case-insensitive routing accommodates the PRD's lowercase forgot-password spelling.
+
+Important schemas and validation:
+
+- Registration takes email, username and password. Username is trimmed, lowercase, 3–20 characters; emails are trimmed and validated, with exact stored-email matching retained. New passwords are strings of at least six characters and at most 72 UTF-8 bytes; they are **not trimmed**. Login/old password accept existing nonempty strings within the byte limit.
+- Public account data omits password, refresh/session version, reset/verification internals, `__v` and avatar.localPath. Related populated user profiles also omit private fields; no password/token values belong in API documentation.
+- Project name/title limits are 200 characters; descriptions and note content at most 10,000. Required text is trimmed/nonempty; optional descriptions may be empty. Project updates require name and/or description and reject unknown fields.
+- Task create requires title; optional description, assignedTo and status. Task update is partial and can consist only of appended uploads. **JSON null assignedTo clears assignment**; an assigned user must exist and belong to the same project. Do not send a serialized attachment metadata array: uploads use multipart field **attachements**.
+- Task statuses: **todo, in_progress, done**. Roles: **admin, project_admin, member**. Member may update only boolean isCompleted on subtasks; privileged roles may also edit title. Notes accept only content. Unsupported update fields/empty updates reject.
+- Resource IDs must be 24 hexadecimal characters. Token endpoints reject malformed/expired/replayed tokens. Missing authenticated membership commonly yields 403 before resource lookup; authorized missing resources return 404. Cross-project child IDs cannot be substituted.
+
+Errors use **{ statusCode, data: null, success: false, message, errors }**, preserving the different `statusCode` casing. Validation is 422; malformed IDs/JSON/URLs 400; missing/invalid sessions 401; permission/verification denial 403; missing resources 404; duplicate/invariant conflicts 409; upload/body limits 413; unsupported file content 415; mail failures 502; unsupported/uncertain transactions 503. Unexpected faults are sanitized 500 without stacks/credentials. B31 is resolved: known charset/encoding/decompression errors now receive appropriate 4xx with CORS; internal faults remain sanitized.
+
+## Models, integrity and business rules
+
+| Model / file | Relationships and important constraints |
+| --- | --- |
+| user / user.models.js | Unique trimmed email and unique lowercase username; bcrypt password; avatar, optional fullName, verification state, one saved refresh token, tokenVersion and hashed temporary tokens/expiry. |
+| Project / project.models.js | Unique project name globally, description and required createdBy → user. Project.__v is also touched to serialize project mutations. |
+| ProjectMember / projectmember.models.js | Required project → Project, user → user and role enum; unique (project,user), plus user/project lookup index. |
+| ProjectInvitation / projectInvitation.models.js | Project, exact email, role, invitedBy, hidden tokenHash and expiresAt; unique (project,email), TTL on expiry. Token expiry is checked explicitly, independently of TTL timing. |
+| Task / task.models.js | Required project, title; optional assignedTo/assignedBy → user; status, attachements array of url/mimeTypes/size; project/assignee index. |
+| Subtask / subtask.models.js | Required task → Task and createdBy → user; title, boolean isCompleted; task index. |
+| ProjectNote / note.models.js | Required project and createdBy → user, content; project index. |
+| FileDeletion / fileDeletion.models.js | Unique filename and timestamps; durable jobs for committed attachment deletion. |
+
+Previously approved policies remain in force: verified users may create a project and receive its Admin membership; roles are per project with no global override. Account actions remain available before email verification; collaboration resources require verification. Both new and existing users must accept emailed invitations. Attachments are deliberately public under the PRD. The detailed role matrix permits Member subtask completion, not general task mutation; no extra Member task-edit permission is inferred from less precise PRD prose.
+
+Project creation writes the project and creator membership in one transaction. Existing-project writes use `withProjectWrite`: increment the parent project's version, then recheck membership/role inside the transaction. This prevents several deletion/assignment write-skew cases. Child queries constrain project/task/note relationships; task detail aggregation scopes both task and project. User references use the actual lowercase registered model. Member counts aggregate the singular project relationship.
+
+A project must retain at least one Admin. Member removal clears that user's task assignments in the same transaction; historical authorship remains. Project deletion cascades tasks/subtasks/notes/members/invitations and queues attachment removal. Task deletion also removes its subtasks and queues files. Driver transactions retry supported transient failures; sessions end in finally blocks. An uncertain commit retains uploaded files and returns 503 so clients check state before retrying. Wider failure/retry and crash-orphan reconciliation are still P01/P09/T03.
+
+## Authentication, invitations and browser behavior
+
+Registration hashes the password and stores hashed verification state before SMTP. Mail failure leaves the account and returns an explicit 502 directing login/resend. Verification/reset temporary tokens contain 20 random bytes, are stored as SHA-256 hashes, expire after 20 minutes and are conditionally consumed once. Resend rotates the verification token; already verified accounts reject.
+
+Login accepts email/password without username, compares bcrypt and returns public user plus access/refresh tokens, also setting cookies. JWTs use HS256 and configurable expiries. Access verification loads the user and checks tokenVersion. Refresh checks its signature, stored token and version, then uses a conditional compare-and-replace update; refresh JWT IDs prevent same-second duplicate rotation. One saved refresh token per user means later logins replace the refresh session; previously issued access tokens remain usable until expiry or version revocation. Logout/password change/reset clear refresh state and increment tokenVersion, invalidating earlier access tokens. Password change also guards the old password/version against races. Missing legacy tokenVersion is treated as zero until revocation.
+
+Refresh accepts the refresh cookie first, otherwise body.refreshToken. Access authentication prefers access cookie, otherwise Authorization. Refresh responses preserve both refreshToken and historical refrershToken aliases. Missing/non-string refresh input returns 401. B32 is resolved: Bearer scheme casing is accepted, while malformed scheme/token boundaries reject. Cookie precedence is unchanged.
+
+Forgot-password normally returns the same 200 message for known/unknown emails, but SMTP failures/timing and registration behavior can reveal account existence; P08 is a policy/security risk requiring verification. The auth router has a bounded, per-process IP/account rate limiter with 429 and Retry-After. It is not distributed gateway enforcement.
+
+Invitations expire after seven days, are stored hashed, bound to project and exact email, and consumed transactionally when a verified recipient accepts. Re-inviting rotates the pending token; sending failure leaves a pending invitation for retry. Existing members use role-update rather than invitation to change permissions. If configured, PROJECT_INVITATION_REDIRECT_URL receives appended project/token path segments; otherwise mail points to the authenticated **POST** acceptance API. Opening a link does not itself submit that POST; a client must handle login/verification/acceptance.
+
+Verification links use the configured server origin and mounted API path; reset links append the token to FORGOT_PASSWORD_REDIRECT_URL. Mail uses SMTP timeouts, TLS-on-connect for port 465, MAIL_FROM override and acceptance checks. **B33 is resolved:** acceptance now compares normalized recipient identities consistently with SMTP envelopes, including internationalized domains and optional local-part quoting. Actual stored email matching remains unchanged. All delivery tests used in-memory transports; no real SMTP delivery was attempted.
+
+Cookies are HttpOnly, SameSite=Lax and Secure in production mode. Cookie-authenticated writes carrying an unapproved Origin return 403. CORS uses configured origins, credentials and allowed headers. CORS headers do not themselves block arbitrary clients. Real browser, missing-Origin/pre-login cases, cross-site deployment, HTTPS and reverse-proxy behavior remain P10; no blanket CSRF-safety claim is made.
+
+## Attachments and filesystem behavior
+
+Multer runs after authentication/permission checks and stores project-relative public/images files using UUID filenames. Accepted MIME/signature pairs: PNG, JPEG, GIF, WebP and PDF. Limits: five files per task (including prior attachments), each **1,000,000 bytes**; multipart text/part limits also apply. The controller validates signatures and builds actual stored-file URLs from SERVER_URL. Metadata preserves **attachements: [{ url, mimeTypes, size }]**. Task updates append uploads; there is no PRD requirement for a separate individual-file-removal API.
+
+Public downloads force attachment disposition, nosniff and sandbox CSP; URLs provide no confidentiality. Signature checks are not malware scanning or full format validation. Failed requests clean temporary uploads; failed unlink attempts can queue jobs. Committed deletions are retried by a worker, processing at most 100 jobs per pass, running on startup and once per minute. Process crashes before DB persistence, uncertain commit outcomes, stale/legacy names and shared/persistent-storage behavior still need reconciliation/recovery verification.
+
+## Environment names and startup
+
+The table lists names only; actual secrets are never reproduced. Non-secret local frontend URLs above were explicitly selected by the user.
+
+| Names | Purpose |
+| --- | --- |
+| MONGO_URI | Application database only. Production/Atlas configuration remains separate from integration testing. |
+| MONGODB_TEST_URI | Dedicated isolated local pcb_test fixture/status connection; no fallback to application/legacy variables. |
+| PORT, NODE_ENV, CORS_ORIGIN | HTTP listening, production cookie/configuration behavior, approved browser origins. |
+| ACCESS_TOKEN_SECRET, ACCESS_TOKEN_EXPIRY | Access signing and duration. |
+| REFRESH_TOKEN_SECRET, REFRESH_TOKEN_EXPIRY | Distinct refresh signing and duration. |
+| SERVER_URL | Public API/attachment origin and verification links; invitation fallback. |
+| FORGOT_PASSWORD_REDIRECT_URL, PROJECT_INVITATION_REDIRECT_URL | Reset and optional invitation client landing URLs. |
+| MAILTRAP_SMTP_HOST, MAILTRAP_SMTP_PORT, MAILTRAP_SMTP_USER, MAILTRAP_SMTP_PASS, MAIL_FROM | SMTP connection/authentication and optional sender. |
+
+`validateEnvironment` checks required strings, HTTP URL form, Mongo URI scheme, ports, duration syntax and differing JWT secrets; production adds a minimum secret length. This is configuration validation, not a connectivity or entropy audit.
+
+**E01 is resolved.** The audit originally found invalid SERVER_URL/FORGOT_PASSWORD_REDIRECT_URL and equal access/refresh secrets. Independently generated secrets and approved local URL/CORS settings now pass the unchanged validator. A local PROJECT_INVITATION_REDIRECT_URL was added. Scripts preserve .env encoding/newlines where practical and verified unrelated values unchanged; .env stays ignored.
+
+The existing application URI is non-local and was not contacted. For this workflow use `npm.cmd run dev:local`: it validates the actual environment, verifies the project-local replica set, selects separate pcb_development only in its process, then imports src/index.js. Ordinary npm start/dev retain their original MONGO_URI behavior; no global environment was changed. The chosen local API URL matches PORT; the selected frontend is localhost:5173.
+
+On valid startup, connectDB uses MONGO_URI, checks transactional topology and initializes model indexes before listen; production duplicates/index failures require operator review. The entrypoint also starts the deletion worker and handles SIGINT/SIGTERM with a shutdown deadline. The normal entrypoint was exercised through dev:local: model/index readiness, HTTP listen, health, unauthenticated denial and malformed-JSON/CORS responses passed. The previously absent pcb_development database now has eight initialized collections and zero records, retained for development. Ctrl+C stopped the startup-check listener. Production failover, listen-failure recovery, shutdown deadlines and file-worker crash recovery remain unverified.
+
+## Project-local MongoDB
+
+Current status confirms the existing setup remains ready; no MongoDB lifecycle/setup action was necessary in this implementation:
+
+| Property | Verified state |
+| --- | --- |
+| Version/topology | Community 8.0.34; rs0, one member, PRIMARY, configuration version 1. |
+| Process/listener | PID 12456 at audit time; only 127.0.0.1:27018. PID is observational, not a future shutdown target. |
+| Executable | tools/mongodb/mongodb-win32-x86_64-windows-8.0.34/bin/mongod.exe |
+| Data | .local/mongodb-data/ |
+| Logs | .local/mongodb-logs/mongod.log; stdout.log and stderr.log in that directory. |
+| Runtime controls | .local/mongodb-runtime/mongod.cfg, instance.json and management/test locks. |
+| Test DB and configuration | pcb_test, selected only by MONGODB_TEST_URI; actual variable passed exact local guard without printing its value. |
+| Integrity | Retained archive SHA-256 recomputed: 6b021a0864494e4decf278b36477a29eb36072432773e4e62c2f42c302630db0; matches the pinned official checksum. |
+
+The prior setup records the official archive source as https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.34.zip, with official checksum/release metadata verification before execution. It recorded Windows 11 x64 compatibility and existing Visual C++ runtime DLLs, with no system prerequisite installation. The preceding audit recomputed the official archive hash. This implementation reused that installation and verified current paths/configuration/PRIMARY without downloading anything. Mongoose 9.7.3 / driver 7.2.0 successfully ran the expanded fixture twice. Neither mongosh nor Database Tools is required.
+
+From the repository root in Windows PowerShell:
+
+```powershell
+npm.cmd run mongodb:status
+npm.cmd test
+npm.cmd run test:integration
+node scripts/dev-local.js --check
+npm.cmd run dev:local  # Interactive app uses pcb_development, never pcb_test
 ```
 
-src/app.js registers taskRouter at /api/v1/tasks and noteRouter at /api/v1/notes. project.route.js adds plural member collections and preserves singular aliases. Its extra POST /:projectId/invitations/:invitationToken/accept is authenticated/verified and validates the invitation instead of requiring existing membership.
+For a future authorized local lifecycle operation:
 
-All original controller/export/module/schema names remain. References now use the existing lowercase user model; collection names and relationship fields are unchanged. attachements, mimeTypes, ApiRespones, statuscode, genrateTemporaryToken, UpdateSubTask, verficationToken and refrershToken remain. Auth responses additionally omit __v and avatar.localPath, and membership/task/note profiles expose only public avatar URLs.
-
-### Current request and data-integrity flows
-
-**Authentication:** the previous typed validation, exact password hashing, single-use temporary tokens, trusted URLs, atomic refresh replacement, unique jti and tokenVersion revocation remain. Unknown login accounts execute bcrypt comparison to reduce the obvious timing difference. Auth routes now have 100 requests per endpoint/IP/account per 15-minute per-process limits with bounded storage/Retry-After. Cookie writes with an Origin header require a configured origin. SMTP now checks accepted recipients as well as rejected promises, uses bounded timeouts and supports MAIL_FROM. Password reset/change/logout invalidate both access and refresh sessions as before.
-
-**Projects:** getProjects joins the singular project relationship and calculates member counts. Creation writes project and creator membership in one transaction. Existing-project writes first increment the project's existing __v field, then recheck membership within the transaction. This shared write serializes membership changes, assignments, child writes and project deletion; transaction snapshot isolation alone would not prevent those races. Updates use typed partial fields and schema validation. Deletion transactionally removes tasks, subtasks, notes, members, invitations and queues attachment deletions.
-
-**Members:** unique (project,user) plus user/project indexes are declared. Admin demotion/removal cannot eliminate the last Admin. Member removal clears Task.assignedTo in that project in the same transaction. No user record or historical createdBy/assignedBy is deleted.
-
-**Invitations:** Admin POST member collection creates/replaces one pending invitation per project/email and sends mail. Tokens contain 20 random bytes, are stored as SHA-256 hashes, expire after seven days and are consumed in a transaction. The recipient must log in with a verified account whose email matches exactly. New recipients register/verify first. Re-inviting rotates the pending token; duplicate existing membership returns 409 and requires the role-update endpoint. SMTP failures return 502 without granting access. PROJECT_INVITATION_REDIRECT_URL can point to a frontend that preserves the token through onboarding; otherwise mail contains the API POST URL, which a GET alone will not accept.
-
-**Tasks/subtasks/notes:** route gates enforce the PRD matrix and every resource is checked against its project. Task creation/update requires an existing same-project assignee; null explicitly clears assignment. Both privileged roles manage tasks and create/delete subtasks. All three roles can set boolean isCompleted; members cannot edit titles. Admin alone mutates notes; every role can read. Whitelisted typed inputs reject injected relationships, bad enums, arrays/objects, null/empty text and malformed IDs. Task detail includes safe assignee and subtask creator profiles.
-
-**Attachments:** Multer runs after JWT/verification/role gates. POST/PUT tasks accept repeated attachements parts, maximum five files total per task and 1,000,000 bytes per file. PNG/JPEG/GIF/WebP/PDF MIME signatures are checked. Stored UUID filename, MIME and size produce the existing metadata shape. Static paths are module-relative and CORS applies; downloads are public per PRD, with Content-Disposition attachment, nosniff and a sandbox CSP. Task updates append files. Failed writes remove files or queue failed cleanup. Committed deletions use durable FileDeletion records, retried after deletion and once per minute by index.js. Unknown transaction commit outcomes preserve potentially referenced files and return 503 for reconciliation.
-
-### Runtime/deployment requirements and remaining risks
-
-- MongoDB must support transactions (replica set/sharded cluster). Startup checks topology, awaits Mongoose model/index initialization and only then listens. A standalone deployment is no longer adequate for these integrity guarantees. Existing duplicate memberships require deliberate cleanup before deploying the unique index; no live cleanup or migration occurred.
-- Configuration names and safe examples are in README. validateEnvironment checks required DB/SMTP/token/link values, positive explicit JWT durations and distinct secrets; production secrets require at least 32 characters. Bare numeric expiry strings are rejected to avoid jsonwebtoken's millisecond interpretation.
-- SERVER_URL remains the trusted public base. Optional additions: MAIL_FROM and PROJECT_INVITATION_REDIRECT_URL. MONGO_TEST_URI is test-only and never read by the production connection function. No real environment values are documented.
-- index.js sanitizes startup failures, handles listen errors and bounded SIGINT/SIGTERM shutdown, and runs the deletion worker. Real deployment shutdown/browser/proxy/HTTPS behavior remains untested.
-- P01/P02/T03/D04 remain open for real transactions/indexes/data/races. The mock adapter serializes transactions and supports rollback; it cannot establish actual MongoDB isolation/retry behavior.
-- P08 remains open for distributed gateway throttling and registration/reset timing/failure enumeration. The application limiter is per process. Known reset accounts can still differ in SMTP timing/502 failure; queued non-enumerating mail delivery would require further design.
-- P09 remains open for persistent/shared disk operations and orphan reconciliation after process crashes or uncertain commits. Content signatures do not scan malware. Old non-UUID attachment filenames are deliberately not automatically deleted by the new cleanup helper. Public attachments are not confidential.
-- P10/P12 remain open for actual SMTP sender/TLS/inbox delivery, browser cookie/proxy behavior, storage permissions and operational verification. The health endpoint is liveness only.
-- Lists/cascades remain unpaginated. Existing global project-name uniqueness and case-sensitive account email matching are preserved. Pagination, email case migration, invitation cancellation/decline UX, and separate readiness/metrics are future decisions rather than invented PRD endpoint requirements.
-- No current confirmed B-series bug is left open, but that is bounded by the source/mocked/disk evidence and is not a guarantee that every runtime defect has been found.
-
-### Test commands and measured outcomes
-
-| Check | Most recent executed outcome |
-| --- | --- |
-| Baseline npm test | 24 passed after sandbox worker spawn EPERM and approved rerun |
-| First expanded npm test | 44 passed |
-| npm test after security/integrity additions | 50 passed, 0 failed, 1 skipped |
-| Mounted PRD route contract | All 33 methods/paths, extra invitation endpoint and both member aliases passed |
-| App-only dynamic import | Passed; production index.js was not imported |
-| node --check source files | Passed before documentation closeout; final total recorded below |
-| Live MongoDB integration | Skipped: user confirmed no isolated replica set / MONGO_TEST_URI |
-| SMTP/deployment/advisory/install | Not run |
-
-The final npm test completed successfully after implementation and documentation updates; the final verification section records the result. The tests execute real Express HTTP, Mongoose casting/population/hooks, JWT/bcrypt/validation and Multer/disk I/O. MongoDB collections, transaction scheduling/rollback, and Nodemailer transport are mocked. The integration fixture only accepts a URI naming a pcb_test_ database, creates a random disposable pcb_test_ database on that test server and drops only that generated database in cleanup. It does not load .env or use MONGO_URI.
-
-README now describes setup, every endpoint group, request fields, response casing, roles, invitations, uploads and limits. requiredThings.md retains its useful historical contents under a superseded notice. Generated public/images files are ignored, with the existing gitkeep retained. package-lock.json and all dependency declarations are unchanged; package.json adds test:integration alongside the prior repaired scripts.
-
-### Recommended next session
-
-Run the guarded integration suite against an isolated MongoDB replica set, then verify real SMTP delivery and deployment configuration. Review existing duplicate memberships/indexes before applying the new runtime to existing data. Do not weaken transaction/authorization checks simply to make a standalone MongoDB instance appear to work.
-
-The remaining document preserves the previous authentication handoff and original audit as history.
-
-### Final verification — 2026-10-18
-
-- `npm test` completed successfully after the implementation/documentation changes: **51 tests, 50 passed, 0 failed, 1 skipped** (27 auth, 19 project/resource, four contract/config/helper tests; one skipped MongoDB integration test). The final run took approximately 5.1 seconds in the Node runner.
-- `node --check` passed for all **39** JavaScript files in src/ and tests/.
-- `node --input-type=module -e "import('./src/app.js').then(() => console.log('Application import passed'))"` passed without running src/index.js or connecting to MongoDB.
-- `git diff --check` initially identified CRLF/trailing-whitespace handling in the newly edited .gitignore. Its line endings were normalized and the repeated check **passed**. No lint/build script exists.
-- The full tracked diff and all added implementation/test files were reviewed. No source/module/model/export renames or file deletions occurred.
-- A documentation check confirmed exactly 64 unique checkpoints, counts **59/5/0/0**, 30 distinct resolved B IDs, and balanced Markdown fences.
-- PRD.md SHA-256 remains `EADE92B71FE9612E59B8586D8589ADE647FE7672DDDA5DC2CA6BEF1833D6D5C3`; package-lock.json remains `F6623F211BF8A115D97A9BFED74909650DEFF0B5206FE8A8849915237A6E2CA3`.
-- A local comparison found **zero** occurrences of configured secret/password/Mongo-URI values in source/tests/docs (values were not printed). .env remains ignored and untracked; no environment values were added.
-- public/images contains only the original gitkeep after test cleanup. No generated attachment remains in the working tree.
-- Final Git state: **23 tracked modified files, 17 untracked files, no deleted files**. Three untracked files (history.md, task.md, tests/auth.test.js) predated this session; 14 files were newly added here. No staging or commit was performed.
-
-### Complete final file inventory
-
-| Git state | File |
-| --- | --- |
-| Modified | .gitignore |
-| Modified | README.md |
-| Modified | package.json |
-| Modified | requiredThings.md |
-| Modified | src/app.js |
-| Modified | src/controllers/auth.controler.js |
-| Modified | src/controllers/project.controlers.js |
-| Modified | src/controllers/task.controler.js |
-| Modified | src/db/database.js |
-| Modified | src/index.js |
-| Modified | src/middlewares/auth.middleware.js |
-| Modified | src/middlewares/multer.middleware.js |
-| Modified | src/middlewares/validtor.middleware.js |
-| Modified | src/models/note.models.js |
-| Modified | src/models/project.models.js |
-| Modified | src/models/projectmember.models.js |
-| Modified | src/models/subtask.models.js |
-| Modified | src/models/task.models.js |
-| Modified | src/models/user.models.js |
-| Modified | src/routes/auth.route.js |
-| Modified | src/routes/project.route.js |
-| Modified | src/utils/mail.utils.js |
-| Modified | src/validators/index.validatorts.js |
-| Untracked (new) | docs/implementation-decisions.md |
-| Untracked (pre-existing, updated) | history.md |
-| Untracked (new) | src/controllers/note.controler.js |
-| Untracked (new) | src/middlewares/rateLimit.middleware.js |
-| Untracked (new) | src/models/fileDeletion.models.js |
-| Untracked (new) | src/models/projectInvitation.models.js |
-| Untracked (new) | src/routes/note.route.js |
-| Untracked (new) | src/routes/task.route.js |
-| Untracked (new) | src/utils/attachment.utils.js |
-| Untracked (new) | src/utils/env.utils.js |
-| Untracked (new) | src/utils/project.utils.js |
-| Untracked (pre-existing, updated) | task.md |
-| Untracked (pre-existing, updated) | tests/auth.test.js |
-| Untracked (new) | tests/contracts.test.js |
-| Untracked (new) | tests/helpers/database.js |
-| Untracked (new) | tests/integration.test.js |
-| Untracked (new) | tests/project.test.js |
-
-## Historical handoff — authorized authentication fixes, 2026-10-17
-
-The user followed the read-only audit with “lets start with resolving the authentication bugs,” authorizing this implementation. The user also explicitly chose: **unverified users may perform account actions; project access requires verified email**. That decision is now enforced.
-
-**Current status:** the app imports successfully and its authentication routes pass 24 HTTP regression tests with MongoDB and SMTP mocked. Startup entries point to the existing src/index.js. The full product is still incomplete: project listing/URL and integrity issues remain, task/subtask APIs are unmounted, and notes have only a model.
-
-Current [task.md](task.md) checklist: **20 PASS, 15 PARTIAL, 27 FAIL, 2 UNVERIFIED** across 64 overlapping checkpoints. Seventeen confirmed findings are resolved: B01–B05, B07–B16, B23–B24. P06 is resolved by the user's choice, and P07's code changes are implemented; real MongoDB concurrency verification is outstanding. Original audit evidence is retained below as history.
-
-### What changed and where
-
-| File | Current responsibility/change |
-| --- | --- |
-| src/controllers/auth.controler.js | Existing ten handlers and genAccessAndRefreshToken names retained; fixed login, links, statuses, public-user fields, reset/change, refresh rotation, logout and mail failure handling; added small local helpers |
-| src/models/user.models.js | Existing lowercase user model/default export retained; added tokenVersion default 0, embedded version in access/refresh JWTs, unique refresh jti |
-| src/middlewares/auth.middleware.js | verifyJWT checks session version and returns safe req.user data; new requireVerifiedEmail gate; permission middleware checks projectId and returns 403 for no membership |
-| src/middlewares/validtor.middleware.js | validate calls errors.isEmpty() so invalid input is rejected |
-| src/validators/index.validatorts.js | Existing factories retained; typed auth fields, common password rule, no password trimming; member email/role types enforced |
-| src/routes/auth.route.js | Existing paths retained; password-change factory now instantiated |
-| src/routes/project.route.js | Router-wide JWT then verified-email gate; existing singular member-list path now also checks membership |
-| src/controllers/project.controlers.js | Removed invalid unused nodemailer pipeline import; member-role upsert enables runValidators; other project logic preserved |
-| src/utils/mail.utils.js | SMTP failures throw a sanitized ApiError(502) instead of being swallowed/logging raw transport errors |
-| src/app.js | Sanitized JSON error/404 handling; CORS entries trimmed |
-| src/index.js | dotenv/config evaluates before app construction; still connects DB/listens only when this entry is run |
-| package.json | main=start target existing src/index.js; added npm test using Node's built-in runner; dependencies unchanged |
-| tests/auth.test.js | New 24-test HTTP suite; mocked collection/SMTP boundary with real Express, validation, Mongoose hooks/casting, bcrypt, JWT and Mailgen |
-| task.md / history.md | Updated resolved items, compliance and session handoff; original audit retained |
-
-No existing file, controller, function, route, model, schema field, or response key was renamed. In particular verficationToken, emailVerficationToken, genrateTemporaryToken, ApiRespones, statuscode, and refrershToken remain. Refresh now additionally returns correctly spelled refreshToken with the same value as the retained refrershToken alias.
-
-### Current authentication flows
-
-- **Registration:** typed email/username/password validation -> duplicate check -> new User with hashed temporary verification token/expiry -> one save (bcrypt hook runs) -> SMTP send -> safe user response, HTTP/body status 201. SERVER_URL supplies the trusted origin for /api/v1/auth/verify-email/:verficationToken. URL configuration is checked before account persistence. A mail failure returns 502 explaining the account was created and the user can log in and resend.
-- **Login:** email/password only; password whitespace is preserved. Bad credentials get a uniform 401. Signing and refresh replacement are guarded by the loaded password hash and session version so a concurrent reset/revocation cannot resurrect an old session. A safe public user and both tokens are returned.
-- **Verification/resend:** tokens retain the existing 20-minute SHA-256 storage design. Verification is one findOneAndUpdate matching token/hash, unexpired time and unverified state; it clears the token and sets the flag atomically. Resend remains secured, usable by unverified accounts, and rejects already-verified accounts.
-- **Project access:** verifyJWT loads the current account, then requireVerifiedEmail requires isEmailVerified before any project route. Authentication/account actions remain available without verification. Member listing also checks an allowed membership role; knowing a project ID is insufficient.
-- **Access JWTs:** contain the existing user fields plus tokenVersion. verifyJWT checks signature with HS256, ID shape, user existence and current tokenVersion. Reset/verification fields, password, refresh token and tokenVersion are absent from req.user/public responses. Unexpected database errors remain 500 rather than being disguised as invalid JWTs.
-- **Refresh:** cookie or body refreshToken, with missing/non-string inputs producing 401. A valid signed token must match the saved token and current tokenVersion. Replacement is a single conditional update; every refresh JWT has a unique jti. Only one concurrent use of an old refresh token can win. The response supplies accessToken, refreshToken and legacy refrershToken.
-- **Logout:** clears stored refresh state, increments tokenVersion and clears both cookies. Both kinds of previously issued JWTs fail subsequent authorization, rather than access tokens remaining usable until expiry.
-- **Forgot password:** validates a scalar email; known and unknown accounts share the same normal 200 message. For a known account it stores an expiring hashed token and sends a link based on FORGOT_PASSWORD_REDIRECT_URL. SMTP failure returns a sanitized 502. Timing and mail-failure distinctions are still P08 concerns.
-- **Reset/change password:** validate new password, hash with bcrypt, then atomically replace credentials, clear pending reset/refresh state and increment tokenVersion. Reset matches the still-unexpired temporary token in that write; change matches the checked old password hash/session version. Atomic updates do not run save hooks, so these two paths explicitly hash before updating. Both clear cookies; reauthentication is required.
-- **Errors:** JSON errors carry statusCode/data/success/message/errors (existing ApiError casing); successful ApiRespones still uses statuscode. Common malformed/expired-token/ID errors use 400, invalid sessions 401, missing project membership/unverified access 403, duplicate accounts 409, validator errors 422, oversized bodies 413 and SMTP failures 502. Raw exception stacks/credentials are not returned.
-
-### Compatibility, configuration and data implications
-
-- The user's per-project role design and unresolved global-admin/project-creation policy are unchanged. Invitation semantics also remain undecided.
-- All project endpoints now require verified email, including project listing/creation. Frontends should offer verification/resend on 403. Login/current-user/logout/change-password/refresh/resend remain available to unverified accounts.
-- Existing request bodies, route paths and exports were preserved. The project collection member URL remains singular /member pending B27; the plural PRD URL was not silently added or renamed.
-- tokenVersion is an **additive** User field, defaulting to zero. Old documents/JWTs without it are interpreted as zero, including conditional updates that match missing values; logout/reset/change increments the stored value. No migration or live database update was performed during development.
-- Refresh storage still has one slot per User. Later login normally replaces the previous refresh session; logout/reset/change revoke all of that user's access/refresh JWTs through the shared version.
-- New-password policy retains the existing six-character minimum and rejects inputs exceeding bcrypt's 72 UTF-8 bytes. Passwords are never silently trimmed now. Login/old-password checks allow shorter legacy passwords so they can be changed. Old accounts whose passwords were previously trimmed still need the historically stored password or a reset.
-- Cookies explicitly use HttpOnly and SameSite=Lax. Secure is enabled when NODE_ENV=production; use production mode with HTTPS. Cross-site frontend deployments, CSRF/proxy behavior and browser cookie handling need deployment testing; bearer transport remains available.
-- Existing SERVER_URL is now also the verification-link origin, not just a future attachment base. SERVER_URL and FORGOT_PASSWORD_REDIRECT_URL must be HTTP(S) URLs without embedded credentials/query/fragment; the latter retains its configured path and appends the reset token. No request Host header is trusted for these links.
-- .env and package-lock.json were not changed, and no dependency was installed. No actual tokens, credential values or connection strings were put in documentation/tests. Test keys/domains are isolated dummy values.
-- dotenv is loaded before app construction in src/index.js. Direct app imports intentionally do not load .env; test fixtures supply their own environment. Do not start the real entry to perform a read-only import check.
-
-### Available scripts now
-
-| Command | Definition / use |
-| --- | --- |
-| npm run dev | nodemon ./src/index.js; real app/DB startup, not run in this session |
-| npm start | node src/index.js; corrected real entry, not run against configured DB |
-| npm test | node --test tests/*.test.js; isolated HTTP regression suite |
-| node test-eval.js | Existing ignored local smoke script; now passes app import |
-| node --check <file> | Syntax-only check; all 26 current source/test JS files passed |
-
-The tests/ directory and tests/auth.test.js are new. No separate test dependency, CI workflow, deployment file or database fixture service was introduced.
-
-### Actual validation results and limits
-
-- Final npm test: **24 passed, 0 failed, 0 skipped**. An initial sandbox run failed before executing tests because Node worker spawn was blocked with EPERM. A requested/authorized escalated run passed; an earlier 21-test run passed before three additional targeted regressions were added.
-- Tests cover all ten auth routes plus health/errors/CORS and project gates: malformed input before persistence, exact password hashing, duplicate-account race handling, login, verification expiry/replay, unverified access, member roles/IDs, safe user responses, body/cookie refresh, unique rotation/replay/concurrent use, revocation interleaving, logout, reset/change, legacy versions, SMTP failure/retry, cookie attributes and invalid link configuration.
-- The suite uses a loopback HTTP listener. Collection methods and Nodemailer transport are mocked; mongoose.connect is guarded and connection readyState remains 0. The adapter tests query intent and controlled interleavings; it does not prove MongoDB topology/index/transaction behavior or real concurrency.
-- node test-eval.js passed. Syntax checks passed on 26 JS files. git diff --check passed.
-- No application deployment, real MongoDB connection/write, SMTP send, dependency install, environment update, migration, commit or Git-history change was performed. npm start/dev were not run.
-
-### Remaining work and recommended next task
-
-For authentication, add appropriate request/account abuse controls and examine timing/failure-path enumeration (P08); run an authorized isolated MongoDB/SMTP integration suite, including actual token races and mail delivery. Validate HTTPS, NODE_ENV, cookie/SameSite, proxy/CORS and deployment configuration (P10/P12). Do not label these checks complete based on the mocked suite.
-
-Outside this patch, project listing joins (B06), member collection URL compatibility (B27), multi-document/uniqueness/last-admin policies (P01–P05), task/subtask/note/attachment implementation (B17–B22, M01–M04), remaining validators, task-read status (B25), and stale README/older audit claims (B26) remain. See task.md checkboxes for priorities.
-
-The historical audit below describes the state **before** these authorized fixes. Its failed import/no-tests/read-only statements are preserved as historical evidence and do not override this current handoff or the user's later authorization.
-
-
-
-## Original read-only audit snapshot — 2026-10-17
-
-This document records the existing repository and a strictly read-only application audit. It is not an implementation log claiming fixes.
-
-- Repository: Project Camp Backend (PCB); package name `project-mangement`, version 1.0.0.
-- Baseline branch: `master` tracking `origin/master`.
-- Baseline commit: `e4259b62c038f92138f61ce4ee9f72947b08cd1f`, dated 2026-10-17, subject `update`.
-- Initial Git status: clean. Neither task.md nor history.md existed.
-- Full PRD: [PRD.md](PRD.md), 180 lines. The user's reference `prd.md` means this existing uppercase filename; do not create a duplicate or rename it.
-- Authorized output: create task.md and history.md only. Application files, package/lock/config/env files, existing notes, database/services, identifiers, and Git history were left unchanged.
-- Detailed findings, evidence, priorities, compliance rows, and future checklists: [task.md](task.md).
-- No ancestor/repository AGENTS.md was found during this audit. Future sessions should check again for applicable instructions.
-
-**Status at the original audit:** the application import fails before startup (B01), and npm start targets a missing file (B02). Authentication/project/member functionality is partially implemented with substantial defects. Task/subtask APIs are unmounted; notes have only a model. This is not production ready.
-
-PRD checkpoint counts: **8 PASS, 25 PARTIAL, 29 FAIL, 2 UNVERIFIED**, out of 64 overlapping audit checkpoints. A PASS describes a narrow source-level requirement, not a successfully exercised HTTP endpoint. All running endpoints are blocked by B01. No completion percentage or successful integration-test result is claimed.
-
-## Project purpose and technology stack
-
-PCB is a REST API for collaborative project management: accounts and email verification, JWT sessions, projects and team roles, tasks/assignees/attachments, subtasks and completion, project notes, and system health. The PRD defines admin, project_admin, and member permissions. Actual roles currently live on project memberships, not globally on users.
-
-| Component | Existing technology / audited version | Purpose |
-| --- | --- | --- |
-| Runtime | Node.js, ES modules; local Node v24.14.0, npm 11.9.0 | JavaScript backend |
-| HTTP | Express 5.2.1 | Routing, JSON/urlencoded parsing, static files |
-| Database | MongoDB through Mongoose 9.7.3 | Schemas, queries, aggregation; no live DB inspection |
-| Authentication | jsonwebtoken 9.0.3, bcrypt 6.0.0, cookie-parser 1.4.7 | Signed access/refresh JWTs, password hashing, cookies |
-| Validation/CORS | express-validator 7.3.2, cors 2.8.6 | Request validators and browser origin policy |
-| Email | Mailgen 2.0.36, Nodemailer 9.1.1 | HTML/text templates and configured SMTP |
-| File storage | Multer 2.3.0 | Disk storage draft, not integrated into routes |
-| Configuration | dotenv 17.4.2 | .env loading in src/index.js |
-| Development | nodemon 3.1.14, Prettier 3.9.4 | Dev restart and formatting; no formatting was run |
-
-package.json also declares @types/jsonwebtoken, @types/mailgen, and @types/nodemailer as dependencies; application source is JavaScript. package-lock.json is lockfile version 3 with 198 dependency entries plus the root. Root dependency maps agree with package.json; installed direct versions were inspected. All locked dependency entries have integrity metadata and npm-registry resolutions. This does not establish advisory/vulnerability safety.
-
-The lock includes packages requiring Node >=20.19.0. No engines field or runtime-version file is committed. Local runtime compatibility is not evidence of a successful deployment.
-
-## Existing directory structure
-
-```text
-repository/
-  PRD.md
-  README.md
-  requiredThings.md             existing prior audit; contains stale completion claims
-  package.json
-  package-lock.json
-  .gitignore
-  .prettierignore
-  .prettierrc
-  .env                         local, ignored; values not documented
-  commands.md                  local learning notes, ignored
-  notes.txt                    local learning notes, ignored
-  defination.txt               local terminology notes, ignored
-  test-eval.js                 local ignored import smoke check
-  task.md                      created by this audit
-  history.md                   created by this audit
-  public/
-    .txt
-    images/
-      gitkeep
-  src/
-    .txt
-    app.js
-    index.js
-    db/
-      database.js
-    controllers/
-      auth.controler.js
-      project.controlers.js
-      task.controler.js
-      healthCheck.js
-    routes/
-      auth.route.js
-      project.route.js
-      healthCheck_route.js
-    models/
-      user.models.js
-      project.models.js
-      projectmember.models.js
-      task.models.js
-      subtask.models.js
-      note.models.js
-    middlewares/
-      auth.middleware.js
-      validtor.middleware.js
-      multer.middleware.js
-    validators/
-      index.validatorts.js
-    utils/
-      apiError.js
-      apiResponse.js
-      asyncHandler.js
-      constants.js
-      mail.utils.js
-  node_modules/                existing installed dependencies, ignored
-  .git/                        existing Git metadata
+```powershell
+npm.cmd run mongodb:start
+npm.cmd run mongodb:status
+npm.cmd run mongodb:stop
 ```
 
-All unusual spellings above are existing identifiers and must be preserved without explicit permission. No services/repositories abstraction, job worker, frontend, migration system, tests directory, CI workflow, container/deployment configuration, or task/note router exists in the inspected project.
+`npm.cmd run test:unit` aliases npm test. Scripts resolve paths from their project location, even when PowerShell's working directory differs; npm commands themselves need the repository as working directory (or npm --prefix). Npm invokes the local PowerShell script with a process-only execution-policy override. Detailed setup: [docs/windows-mongodb.md](docs/windows-mongodb.md).
 
-Learning files discuss setup, Linux/Git commands, Express, authentication, middleware, and uploads; they are explanatory notes rather than executable requirements. src/.txt and public/.txt are directory notes; public/images/gitkeep is a placeholder.
+Start checks ownership/port state, uses the local executable in a hidden process, logs locally and waits for PRIMARY. Replica initialization is allowed only for an unconfigured server; existing replica configuration is retained. Stop validates recorded PID/start time/executable plus server identity before graceful shutdown; it does not kill arbitrary MongoDB processes or remove data. A management lock serializes operations. MongoDB Start/Stop paths were **not executed during the audit or this implementation**; the existing server stayed running. The prior setup's stop/restart, repeat-start and alternate-working-directory success are historical evidence, not new results.
 
-## Architecture and important modules
+`mongodb:install` is for a missing installation and verifies the official archive; it was not rerun. `mongodb:smoke` performs temporary writes/deletion and was not rerun during this audit/implementation; the original setup documented its success. Current integration connection and fixture writes provide the new Mongoose/transaction evidence.
 
-The intended request path is Express app -> mounted router -> authentication/permission/validation middleware -> controller -> Mongoose model -> ApiRespones. Errors are forwarded to Express's default handler. Controllers call models directly; there is no service layer.
+For connection/startup failure, inspect Status and the local mongod.log/stderr.log (redact any sensitive output before sharing). A port/ownership mismatch requires process inspection; do not terminate unrelated instances. For missing runtime DLL errors (for example 0xC0000135), identify the named Microsoft Visual C++ x64 dependency; scripts never silently install system prerequisites. For failed elections, inspect replica status/logs without resetting configuration/data. Missing/unsafe test configuration must fail closed; never substitute Atlas. Existing application collections or a stale test lock require owner/process inspection before separately authorized cleanup.
 
-| File | Responsibilities / important identifiers | Current state |
-| --- | --- | --- |
-| src/index.js | dotenv.config, port selection, connectDB, app.listen | Imports app before dotenv runs; connection starts on entry execution |
-| src/app.js | JSON/urlencoded 16kb limits, static public, cookie parser, CORS, auth/projects/health mounts, root text response | B01 prevents import; no task/note router or JSON error middleware |
-| src/db/database.js | connectDB calls mongoose.connect(MONGO_URI), logs outcome, exits on error | Not invoked by audit; real connection state unverified |
-| src/controllers/auth.controler.js | genAccessAndRefreshToken; registerUser, login, logoutUser, getCurrentUser, verifyEmail, resendEmailVerification, refreshAccessToken, forgotPasswordRequest, resetForgotPassword, changeCurrentPassword | All ten endpoint handlers exist; numerous contract/security defects |
-| src/controllers/project.controlers.js | getProjects, getProjectById, createProject, updateProject, deleteProject, addMemberToProject, getsProjectMembers, updateMemberRole, deleteMember | Invalid unused pipeline import blocks app; listing and access defects |
-| src/controllers/task.controler.js | getTasks, createTask, getTaskById drafts; updateTask, deleteTask, createSubTask, UpdateSubTask, deleteSubTask empty | Invalid named User import; unmounted and incomplete |
-| src/controllers/healthCheck.js | healthCheck returns ApiRespones(200, message) | Static liveness handler; does not check MongoDB |
-| src/routes/auth.route.js | Ten authentication route/method registrations | Change-password factory not instantiated |
-| src/routes/project.route.js | Nine route/method registrations; router-wide verifyJWT | Collection member paths are singular; list has no membership gate |
-| src/routes/healthCheck_route.js | GET / -> healthCheck | Mounted at /api/v1/healthcheck |
-| src/middlewares/auth.middleware.js | verifyJWT and validateProjectPermission(roles) | JWT loads user; project gate loads membership; incomplete route coverage |
-| src/middlewares/validtor.middleware.js | validate converts express-validator errors to ApiError | Function-object check bypasses every validation error |
-| src/middlewares/multer.middleware.js | upload export using diskStorage in public/images | No consumer route; per-file 1,000,000-byte cap only |
-| src/validators/index.validatorts.js | userRegistrationValidator, userLoginValidator, userChanggedCurrentPasswordValidator, userForgotPasswordValidtor, userRestForgotPasswordValidator, createProjectValidator, addMemberToProjectValidator | Seven factories; incomplete policy/coverage and broken common enforcement |
-| src/utils/apiResponse.js | ApiRespones(statuscode, data, message) | Outputs statuscode, data, message, success; preserve spelling |
-| src/utils/apiError.js | ApiError(statusCode, meassage, errors, stack) | Error fields exist, but no application JSON serializer is installed |
-| src/utils/asyncHandler.js | asyncHandler forwards promise rejection to next(err) | Express receives forwarded errors; wrapper does not return its promise |
-| src/utils/constants.js | UserRolesEnum, AvailableUserRole, TaskStatusEnum, AvailableTaskStatus | Correct PRD enum strings |
-| src/utils/mail.utils.js | sendingEmail; emailVerficationMailgenContent; forgotPasswordMailgenContent | Mailgen template generation and SMTP; swallowed send failures |
+The ignore rules cover local binaries/data/log/runtime paths and .env; .env.example is not inadvertently ignored. The original MONGO_URI and MONGODB_TEST_URI values remain unchanged. Only the explicitly authorized local secret/URL/CORS settings changed in .env.
 
-## Data models, relationships, and business rules
+## Tests, measured outcomes and limits
 
-All six top-level schemas use timestamps. ObjectId refs are relationships by convention, not database foreign-key constraints.
-
-| File / registered model | Collection convention | Fields and relationships |
-| --- | --- | --- |
-| src/models/user.models.js / `user` (default export) | users | avatar {url, localPath}; unique lowercased/trimmed username; unique trimmed email; fullName; password; isEmailVerified; refreshToken; forgotPasswordToken/Expiry; emailVerficationToken/Expiry |
-| src/models/project.models.js / Project | projects | globally unique trimmed name; description; required createdBy referencing User |
-| src/models/projectmember.models.js / ProjectMember | projectmembers | required user and project refs; role enum defaults to member; no declared compound unique index |
-| src/models/task.models.js / Task | tasks | required title/project; description; optional assignedTo/assignedBy User refs; status defaults todo; attachements array with url, mimeTypes, size |
-| src/models/subtask.models.js / Subtask | subtasks | required title/task/createdBy; isCompleted defaults false |
-| src/models/note.models.js / ProjectNote | projectnotes | required project/createdBy/content |
-
-Relationships: a user participates in many projects through ProjectMember; a project contains tasks and notes; a task contains separately stored Subtask documents. Subtasks are **not embedded** in Task, despite README wording.
-
-Important existing rules and limitations:
-
-- Project creation writes a Project then an admin ProjectMember for its creator. It is not atomic.
-- Permissions query ProjectMember using both projectId and authenticated user ID. A creator field alone grants no fallback permission.
-- Project names are unique across the collection, not per creator. The PRD does not specify whether this scope is intended.
-- Adding an existing membership is an upsert that also changes its role; there is no separate duplicate-member rejection or invitation record.
-- updateMemberRole expects body `newRole`, while addition expects `role`. The role-update handler checks AvailableUserRole explicitly.
-- No last-admin, ownership-transfer, or member-task reassignment rule is enforced.
-- Task status strings are exactly todo, in_progress, done. No transition restrictions are specified by the PRD or implemented.
-- Every User ref is spelled `User`, but the registered model is lowercase `user`; populate fails (B18). Aggregate lookups against users use collection names and are unaffected by model-name resolution.
-- No project/member/task/note relationship index is declared except project-name uniqueness; actual live indexes are unknown.
-- The task model/controller consistently use the existing misspelling `attachements`. Do not rename it without permission. MIME field spellings disagree and need a compatible fix.
-- fullName exists on User but registerUser only persists email, username, password, and verification status. This is an observed behavior, not a claimed PRD requirement to accept fullName.
-
-## Actual routes and API contracts
-
-These are registrations in source, **not demonstrated working endpoints**. The global import failure blocks them. Required task/note routes are listed in task.md/PRD.md.
-
-### Authentication — /api/v1/auth
-
-| Method / actual relative path | Handler | Authentication / expected input |
-| --- | --- | --- |
-| POST /register | registerUser | Public; email, username, password; destructured role is ignored |
-| POST /login | login | Public; email/password validators; controller also wrongly requires username |
-| GET /verify-email/:verficationToken | verifyEmail | Public; raw temporary token in URL; spelling agrees internally |
-| POST /refresh-token | refreshAccessToken | Refresh cookie or body refreshToken; no access JWT prerequisite |
-| POST /forgot-Password | forgotPasswordRequest | Public; email; Express routing is case-insensitive by default, so PRD's lowercase spelling is not a demonstrated failure |
-| POST /reset-password/:resetToken | resetForgotPassword | Public; token param and body newPassword |
-| POST /logout | logoutUser | verifyJWT |
-| GET /current-user | getCurrentUser | verifyJWT |
-| POST /change-password | changeCurrentPassword | verifyJWT; oldPassword/newPassword; currently stalls in validator factory |
-| POST /resend-email-verification | resendEmailVerification | verifyJWT; user must not already be verified |
-
-### Projects — /api/v1/projects
-
-verifyJWT applies to every project route.
-
-| Method / actual relative path | Handler | Additional permission/input |
-| --- | --- | --- |
-| GET / | getProjects | Authenticated user's memberships |
-| POST / | createProject | name, optional description; no existing admin gate |
-| GET /:projectId | getProjectById | validateProjectPermission(AvailableUserRole) |
-| PUT /:projectId | updateProject | admin membership; name, description |
-| DELETE /:projectId | deleteProject | admin membership |
-| GET /:projectId/member | getsProjectMembers | No project membership gate; B04 |
-| POST /:projectId/member | addMemberToProject | admin membership; email, role |
-| PUT /:projectId/members/:userId | updateMemberRole | admin membership; newRole |
-| DELETE /:projectId/members/:userId | deleteMember | admin membership |
-
-The collection member paths are singular; PRD requires plural members. Existing detail paths already use plural members. Correcting paths must preserve consumers or have explicit approval for a contract change.
-
-### Other paths
-
-- GET /api/v1/healthcheck/ -> healthCheck, no authentication; returns a basic liveness message.
-- GET / -> unrelated placeholder text.
-- Static public directory is served before cookie parsing/CORS; public/images files would be accessible through /images.
-- /api/v1/tasks and /api/v1/notes are not mounted. No upload endpoint exists.
-
-## Important request flows
-
-### Startup/configuration
-
-ES module evaluation loads src/app.js, routers, controllers, and models before index.js executes dotenv.config. The invalid nodemailer pipeline import currently aborts this process. If repaired, the app captures CORS_ORIGIN before .env loads; other environment accesses inside runtime functions happen later. index.js then connects MongoDB and starts listening only after connection resolves. Errors can call process.exit(1).
-
-Do not import src/index.js merely to check syntax or exports: it initiates a real database connection and server startup. Importing app alone does not intentionally connect/listen; it currently fails during module linking.
-
-### Registration, verification, login
-
-1. Registration validators sanitize/check inputs, then validate should reject errors; B03 currently lets them through.
-2. registerUser searches email/username duplicates, creates User, and the pre-save hook hashes modified passwords with bcrypt cost 10.
-3. genrateTemporaryToken creates 20 random bytes represented as hex, stores a SHA-256 hash, and sets a 20-minute expiry. Plain tokens are intended only for email links.
-4. Registration saves verification hash/expiry and sends a Mailgen/Nodemailer email. Generated verification links use the wrong /api/v1/users prefix. Delivery errors are swallowed.
-5. verifyEmail hashes the URL token, finds an unexpired matching user, clears verification fields, and sets isEmailVerified true.
-6. login queries by email and compares bcrypt hash, but additionally demands any truthy username. It does not require isEmailVerified.
-7. genAccessAndRefreshToken signs an access JWT containing _id/email/username and a refresh JWT containing _id; it stores one raw refresh token on User.
-8. Login returns a public-ish user projection plus both tokens in JSON and sets accessToken/refreshToken cookies with httpOnly:true and secure:true. No explicit sameSite option is configured.
-
-### JWT, project authorization, refresh, logout
-
-verifyJWT takes the accessToken cookie first, otherwise replaces the literal Bearer prefix in Authorization. It verifies the JWT with ACCESS_TOKEN_SECRET, loads the user, excludes password/refresh/verification fields, and assigns req.user. Reset-token fields are mistakenly included. Database/token failures inside its try are all reported as invalid access tokens.
-
-validateProjectPermission extracts projectId, constructs ObjectIds, looks up the caller's ProjectMember, assigns its role to req.user.role for the current request, and checks the supplied allowed roles. It does not define a global admin. Invalid IDs are unguarded. The member-list route omits this middleware.
-
-refreshAccessToken verifies the incoming refresh JWT with REFRESH_TOKEN_SECRET, finds the user, compares the stored refresh value, generates/saves a new pair, and saves refresh again. It sets both cookies and returns accessToken plus misspelled refrershToken. Missing req.body can throw before the try block. Rotation is not atomic.
-
-logoutUser empties the saved refresh token and clears both cookies. Existing access JWTs remain cryptographically valid until expiry; there is no revocation/session-version field. One saved refresh token means later logins generally replace earlier refresh sessions; concurrent and same-second behavior needs tests.
-
-### Password recovery/change
-
-forgotPasswordRequest finds a user by email, generates the same kind of expiring hashed temporary token, persists it, and sends a link under FORGOT_PASSWORD_REDIRECT_URL. Unknown users receive a distinguishable 404. Mail failure is not propagated.
-
-resetForgotPassword hashes resetToken, queries hash plus future expiry, clears reset fields, replaces password, and saves without schema validation; the password pre-save hook still hashes modified values. New-password rules are too weak and their errors are bypassed. Existing refresh sessions are not revoked.
-
-changeCurrentPassword would compare oldPassword and hash/save newPassword, but its route currently invokes a validator factory as middleware and never reaches the controller. Once reachable, it shares the session-revocation/password-policy concerns.
-
-### Project and member operations
-
-getProjects aggregates from memberships. The actual singular project field disagrees with plural lookup paths/output and singular unwind/projection. It cannot return the intended joined project data/member counts. Exact MongoDB output shape was not tested; do not assume it is always an empty array.
-
-getProjectById and project update/delete are behind membership gates. updateProject uses findByIdAndUpdate without update validators; shared body validation is broken.
-
-deleteProject deletes the project first, finds its task IDs, deletes their subtasks, then tasks, notes, and projectmembers. The intended cascade relationship is sensible, but failures/races can leave partial state; no transaction, compensation, or attachment-file cleanup exists.
-
-addMemberToProject finds an existing account by email and upserts the membership/role. It sends no invite and cannot invite unregistered accounts. Its update does not enable schema validators. getsProjectMembers aggregates users with a limited profile projection, but does not authorize caller membership. Role updates/removals scope their queries to userId plus projectId.
-
-### Draft tasks, files, subtasks, notes
-
-getTasks checks project existence, queries Task.project, and populates assignedTo; populate fails due to B18 and it returns the wrong 201 read status. createTask checks only project existence, casts optional assignee without checking membership, maps req.files, and stores a task. Attachment URLs use originalname although Multer stores a timestamp-prefixed filename; incoming mimetype is not the schema's mimeTypes field.
-
-getTaskById aggregates task, assignee, subtasks, and subtask creators. It matches taskId alone; it does not constrain task.project to the authorized projectId. This is dangerous to mount behind a route-level project gate until B21 is fixed.
-
-updateTask/deleteTask/createSubTask/UpdateSubTask/deleteSubTask have empty bodies and would not respond if mounted. Notes have no controller at all. Multer's upload export is unused, has a per-file size limit, and lacks a complete content/count/cleanup policy.
-
-## Environment-variable names and scripts
-
-No environment values, credentials, tokens, or connection strings belong in this document. All thirteen directly referenced variable names below were present as names in the local .env; validity, strength, values, and external service functionality were not assessed.
-
-| Variable | Use / timing |
+| Command/check executed after implementation | Actual result |
 | --- | --- |
-| PORT | src/index.js listening port; fallback exists |
-| CORS_ORIGIN | src/app.js comma-separated allowed origins; currently read before dotenv |
-| MONGO_URI | src/db/database.js MongoDB connection |
-| ACCESS_TOKEN_SECRET | Access JWT signing/verification |
-| ACCESS_TOKEN_EXPIRY | Access JWT expiresIn option |
-| REFRESH_TOKEN_SECRET | Refresh JWT signing/verification |
-| REFRESH_TOKEN_EXPIRY | Refresh JWT expiresIn option |
-| MAILTRAP_SMTP_HOST | Nodemailer SMTP host |
-| MAILTRAP_SMTP_PORT | Nodemailer SMTP port |
-| MAILTRAP_SMTP_USER | SMTP authentication username |
-| MAILTRAP_SMTP_PASS | SMTP authentication password |
-| FORGOT_PASSWORD_REDIRECT_URL | Frontend password reset link prefix |
-| SERVER_URL | Draft attachment public URL base |
+| `npm.cmd test` | **57 passed / 0 failed / 0 skipped**, 2 suites; final run about 5.72 seconds. Existing B01–B30/33-route regressions remain passing. |
+| `npm.cmd run test:integration` | **6 passed / 0 failed / 0 skipped**, about 4.20 seconds; one parent fixture plus five named lifecycle subtests, not six independent fixtures. Expanded suite passed twice. |
+| `node --check` over src/tests/scripts | **44 files passed**, including all 34 application JS files. |
+| PowerShell Parser.ParseFile on scripts/mongodb.ps1 | Passed; existing script unchanged. |
+| Actual .env validateEnvironment and app-only import | Passed; Mongoose remains disconnected, import starts no listener. |
+| `node scripts/dev-local.js --check` | Actual local configuration and project replica-set verification passed without model writes. |
+| `npm.cmd run dev:local` | Normal src/index.js startup, index initialization and listener passed; health 200, no-auth 401, malformed JSON 400 and approved-origin credentialed CORS passed. |
+| Ctrl+C and listener check | API listener stopped. The interrupted npm batch wrapper exited 1; no startup failure occurred. MongoDB stayed running. |
+| `node scripts/mongodb-admin.js status` | Community 8.0.34, PID 12456, project paths, loopback and rs0 PRIMARY verified. |
+| Post-fixture read-only inspection | pcb_test zero collections; public/images only gitkeep; integration.lock absent. |
+| Read-only development DB inspection | pcb_development has eight initialized application collections/indexes and **zero records**. Fixture never uses it. |
+| `git diff --check`; `git diff --cached --check` | Passed. No lint/build scripts; no formatter, build, dependency install or advisory scan. |
 
-NODE_ENV is additionally relevant to Express's default error/production behavior, but it is not directly referenced by project source or among the thirteen observed .env keys. The code has no centralized environment validation. Expiry values must be compatible with jsonwebtoken; production secret requirements need review without exposing values.
+Initial sandbox attempts to run the unit and integration commands failed at Node worker creation with EPERM. Approved reruns executed the tests; only those completed runs supply the pass counts. There were no failing application tests after the fixes. The integration's injected cascade exception intentionally asserts 500 plus actual rollback and successful retry.
 
-| Command/script | Existing definition | Audit treatment |
-| --- | --- | --- |
-| npm run dev | nodemon ./src/index.js | Not executed; starts app/connects DB |
-| npm start | node index.js | Not executed; target missing |
-| package main | index.js | Metadata points to missing root file |
-| node test-eval.js | Imports app, prints success only if import completes | Executed; failed on B01 |
-| node --check <source file> | Built-in parser check | Executed for all 25 source files successfully |
+Unit/mail regressions cover all B31 cases, including invalid/truncated gzip/deflate/Brotli, compressed/plain body limits and parser-error CORS. They prove valid compressed requests reaching internal zlib-like errors remain 500. B32 casing/malformed headers, expiry and cookie precedence pass. B33 normal/IDN/Unicode-local/quoted recipients and actual MailComposer normalization pass; wrong recipient/local-case, empty/invalid accepted lists and transport errors still fail.
 
-There are no test, lint, build, format, migration, or CI scripts in package.json. Prettier configuration exists, but formatting would modify forbidden files and was not run. .gitignore covers node_modules, .env, learning notes, Zone.Identifier files, and test-eval.js. The local import smoke script is not a tracked regression suite.
+Real integration retains the previous unique-index/member aggregation, transaction rollback, last-Admin denial, concurrent refresh rotation and project-delete/create races. Added named subtests:
 
-## Existing feature state and unresolved issues
+1. **Onboarding:** real register/hash, expired verification denial/resend, single-use verification, unverified project denial, authenticated creator Admin membership and duplicate project handling.
+2. **Invitations:** existing/new IDN recipients, pending membership, exact-email/verification requirements, expiry/rotation, simultaneous acceptance with one winner, role changes and Admin versus lower-role restrictions.
+3. **Resources/files:** task/subtask/note create/read/update, all-role reads, Project Admin task writes, Member completion-only behavior, real metadata persistence, exact public downloads and appended files, status changes and null assignment.
+4. **Isolation/rollback/cleanup:** two-project child substitution denial, invalid-assignee transaction rollback with uploaded-file cleanup, injected mid-cascade failure retaining DB rows/files with no committed deletion jobs, removed-member assignment cleanup/access denial, individual deletion and successful project cascade.
+5. **Sessions/client HTTP:** credentialed CORS preflight, denied Origin, cookie attributes/auth/refresh, rotation/reuse denial, logout, reset expiry/single use and old-session revocation, password change and access/refresh expiry.
 
-Detailed evidence and recommended fixes are in task.md; IDs there are the source of truth.
+The parent fixture connects only through the existing exact MONGODB_TEST_URI guard and verifies actual paths/topology/PRIMARY before model creation/indexes. AutoCreate/autoIndex remain disabled until verification. It refuses existing application collections, obtains its exclusive lock and drops only successfully created collections at completion; no whole database deletion occurs. Temporary file ownership is captured from that fixture's Multer filename callbacks, not inferred by deleting every new file in a shared directory. Connections/server/lock are closed; cleanup still runs on failure. The new lifecycle helper performs no independent connection or database selection.
 
-| Area | State / next concern |
-| --- | --- |
-| Startup | Blocked by B01; production entry wrong, B02 |
-| Validation/errors | B03 bypass; B05 hanging middleware; missing typed/param validators; B14/B15 malformed-input/JSON errors |
-| Authentication | Handlers present; B07–B12, B23/B24; password recovery does not end old refresh sessions |
-| Projects | CRUD declared; B06 listing joins broken; P01 non-atomic creation/deletion |
-| Membership/RBAC | Per-project gates exist; B04 member-list disclosure; B16 invalid roles; B27 wrong collection URL; P02/P03 uniqueness/admin integrity |
-| Tasks | Unmounted drafts; B17 import, B18 references, B21 project scope, B22 assignee integrity; empty update/delete |
-| Subtasks | Model only plus three empty handlers; completion API missing |
-| Notes | Model only; all five endpoints absent |
-| Attachments | Unused storage helper; B19 URLs/B20 metadata, P09 upload safeguards |
-| Configuration/deployment | B13 CORS timing; P10/P12 deployment/mail behavior unknown |
-| Documentation/tests | B25/B26 contracts/stale docs; no committed automated suite or deployment gates |
+No automated test contacted Atlas, production services or real SMTP. The local startup check used the separate previously absent development database; its probes sent no emails and created no user/project records. No existing application data was modified. Running MongoDB data/log files naturally change during operation.
 
-Potential issues must not be promoted to demonstrated incidents without evidence: project-write failure recovery, duplicate membership races/live indexes, last-admin policy, invitation semantics, global admin scope, verification gating, token races, rate limiting/gateway protections, CSRF/proxy behavior, upload exposure, query performance, and actual SMTP/DB state.
+Actual browser behavior, live sender/TLS/inbox delivery, deployment proxy/HTTPS/CSRF policy, production duplicate/index review, backups/restore/failover, sustained contention and persistent/shared-storage crash recovery remain unverified. Wider transient/uncertain-commit and queue-recovery scenarios are still P01/P09/T03; the complete local happy path plus targeted faults does not prove every recovery scenario.
 
-The PRD explicitly allows all roles to update subtask status, while task mutations belong to admin/project_admin. Its high-level reference to members updating task completion is less precise than the matrix/endpoints; clarify any broader member task-edit behavior before adding it. Note mutations are admin-only; notes/tasks must be project-scoped even when IDs are known.
+## Remaining readiness work
 
-## Checks, outcomes, and audit limitations
+There is no remaining confirmed source-code blocker among E01/B31–B33. Begin local frontend integration with [docs/frontend-integration.md](docs/frontend-integration.md), then obtain **actual browser sign-off** for login/credentials, serialized refresh/logout and the selected invitation/reset pages. HTTP tests passed; no frontend or browser harness was created. Preserve localhost on both client and API for the local cookie workflow.
 
-Executed checks:
+Real SMTP requires explicit external-send authorization. P08 enumeration/shared rate-control policy, P10 HTTPS/proxy/pre-login/missing-Origin CSRF policy, P01/P02 deployment data/index/transaction recovery and P09 persistent storage remain production/security gates. Pagination, readiness/metrics, root placeholder wording and extra APIs are optional. See task.md for preserved IDs, priorities and acceptance criteria; no new global-admin or invitation policy decision is needed.
 
-- Git status/commit and file inventories; read the full PRD and every application source file, existing docs/config, local notes, and package/lock metadata.
-- Node/npm version checks; node --check succeeded on all 25 source JS files.
-- Existing node test-eval.js failed with the nonexistent nodemailer pipeline export. A separate task-controller import failed with nonexistent named User export.
-- All 48 relative imports point to existing files; this does not validate exported names.
-- Root index.js existence check returned false.
-- In-memory express-validator/route probes reproduced: three invalid registration fields still advance; change-password middleware returns an array without calling next; one-character reset password passes its validator. An additional isolated invalid-email probe also advanced.
-- In-memory Mongoose inspection reproduced MissingSchemaError for User population and discarded mimetype metadata; no membership indexes are declared. Connection readyState remained 0.
-- Package/lock root agreement, direct installed versions, dependency integrity/resolution metadata.
-- Documentation completeness and final file-scope verification are recorded in the closeout below.
+## Historical continuity
 
-No application server was started. No database connection/query/write, SMTP send, upload, external service call, install, migration, formatter, destructive command, or Git mutation was performed. The probes used process-local objects only. No real secrets were used to generate tokens. No HTTP/integration/security/load/production suite was run, and no such test success may be inferred.
+The earlier 2026-10-17 audit identified B01–B27; authorized authentication/backend work repaired those and B28–B30 while preserving nomenclature. The original 2026-10-18 MongoDB setup installed the local replica set and hardened isolation. Its 53 unit/mocked and one integration pass were reconfirmed by the subsequent read-only audit.
 
-The database topology/version/data/indexes, mail delivery, browser cookie/CORS behavior, live gateway controls, deployment status, and dependency vulnerability advisories remain unverified. A source audit cannot prove that every runtime defect has been found.
+That audit changed only history.md/task.md, identified E01/B31–B33 and reported **52 PASS / 12 PARTIAL** with missing full real-persistence coverage. The current authorized implementation resolves those defects and adds the measured lifecycle coverage above; the old counts/open statuses are historical, not the current state. B01–B30 were revalidated through the full current regression suite, import and syntax checks; their resolutions are retained in task.md.
 
-## Original audit recommendations (see current handoff for completed work)
+## Files changed and preservation
 
-1. Obtain a separate implementation instruction; this audit does not authorize fixes.
-2. Make the existing app importable (B01), align start entry to the existing file (B02), then repair shared validation enforcement (B03) with focused regressions. Preserve all identifiers.
-3. Close member-list authorization and session/data-integrity gaps before exposing a service.
-4. Restore auth/project/member functionality and clarify invitation/admin/verification policies.
-5. Finish scoped task/subtask/note/attachment functionality and associated validation.
-6. Complete isolated integration/security tests, deployment checks, and accurate API/setup documentation; update the audit statuses using executed evidence.
+Changed in this task:
 
-## Instructions for Future Codex Sessions
+- **src/app.js**, **src/middlewares/auth.middleware.js**, **src/utils/mail.utils.js**: focused parser/CORS, header and mail fixes.
+- **tests/auth.test.js**, **tests/integration.test.js**: regressions, actual envelope mock and expanded guarded fixture.
+- **package.json**: added dev:local while retaining all prior script changes.
+- Ignored **.env**: ACCESS_TOKEN_SECRET, REFRESH_TOKEN_SECRET, SERVER_URL, FORGOT_PASSWORD_REDIRECT_URL, CORS_ORIGIN; added PROJECT_INVITATION_REDIRECT_URL. Unrelated values and database URI values preserved.
+- **docs/windows-mongodb.md**, **docs/implementation-decisions.md**, **history.md**, **task.md**: actual setup/readiness/test updates.
+- Created **scripts/dev-local.js**, **tests/helpers/integration-lifecycle.js**, **docs/frontend-integration.md**.
 
-- **Read prd.md, history.md, and task.md before starting work.** In this repository, the PRD is actually named **PRD.md**; read that existing file and preserve its case/name.
-- **Inspect existing code before proposing changes.** Check Git status and applicable AGENTS.md/skills first; preserve any user changes.
-- **Never rename files, controllers, functions, routes, models, or other identifiers without explicit permission.** This includes existing misspellings, model registration strings, schema fields, response keys, and capitalization.
-- **Preserve the existing project structure, naming conventions, and API contracts.** Propose compatible changes where a bug affects a contract; get explicit authorization for renames/removals or migrations.
-- **Update the documentation after authorized implementation work.** Keep useful prior information, mark resolved issue IDs only after verifying them, and record actual checks and limitations.
-- **Never claim tests passed unless they were actually executed successfully.** Distinguish parsing, imports, isolated probes, mocked tests, integration tests, and deployment checks.
-- The original audit was strictly read-only. The later authentication implementation was explicitly authorized; preserve that authorization and the user's chosen verification policy when continuing within this scope.
-- Do not install dependencies, start database-connected entrypoints, send mail, mutate services/data, run migrations, or change Git history under an audit-only instruction.
-- Never reproduce .env values or secrets in docs, logs, tool output, or test artifacts.
-- Resolve PRD ambiguity explicitly rather than inventing global roles, invitation flows, file-visibility rules, or member mutation permissions.
-- Preserve `auth.controler.js`, `project.controlers.js`, `task.controler.js`, `validtor.middleware.js`, `index.validatorts.js`, `ApiRespones`, `statuscode`, `genrateTemporaryToken`, `UpdateSubTask`, and existing persistence/API keys unless the user expressly permits a change.
+Pre-existing Git changes retained: unstaged .gitignore/history.md/package.json/task.md/tests/integration.test.js; staged README.md deletion; untracked docs/windows-mongodb.md, scripts/mongodb.ps1, scripts/mongodb-admin.js, scripts/lib/mongodb-test.js and tests/mongodb-safety.test.js. The earlier MongoDB setup remains intact.
 
-## Audit closeout
+Final verification uses the new implementation baseline of 63 files, not the preceding audit baseline. Only the intended files above changed/were added; .gitignore, PRD.md, package-lock.json, all controller/route/model files and MongoDB config/ownership/control files remain byte-identical. Generated real secrets were checked absent from source/test/documentation files and .env remains ignored. No staging, commit, reset, clean, stash, renaming or discarded work occurred.
 
-- Created task.md and history.md; there was no pre-existing content in either to overwrite.
-- Preserved PRD.md, README.md, requiredThings.md, application/config/package/environment files, local learning notes, and test-eval.js.
-- Final SHA-256 comparison verified all 41 pre-existing non-dependency/non-Git project files unchanged; only task.md and history.md were added. Both tracked and staged Git diffs were empty, git diff --check reported no errors, and final Git status listed only these two untracked documentation files.
-- Documentation checks verified 64 unique PRD rows with counts 8/25/29/2, 27 confirmed bug IDs, 12 potential-issue IDs, six missing-feature groups, no duplicate finding IDs or unresolved finding references, and the required future-session instructions. A direct installed-versus-lock version comparison found no mismatches.
-- No bugs were fixed, no identifiers renamed, and no application or external state changed.
+Final Git inventory: the preceding changed/untracked files, plus modified src/app.js, src/middlewares/auth.middleware.js, src/utils/mail.utils.js, tests/auth.test.js and docs/implementation-decisions.md; new scripts/dev-local.js, tests/helpers/integration-lifecycle.js and docs/frontend-integration.md. The existing untracked docs/windows-mongodb.md was also updated. .env remains ignored; only README.md is staged deleted. Local runtime DB data/logs are excluded from byte equality because of authorized tests/startup.
 
+## Instructions for future Codex sessions
+
+Read current history.md/task.md, the complete uppercase PRD.md, applicable instructions and client/setup docs; inspect current Git state before changes. Do not repeat completed audit work unnecessarily. Preserve current controller/model/function/field names and spelling aliases, including ApiRespones/statuscode, attachements/mimeTypes, UpdateSubTask and refrershToken. Do not invent global roles, broaden Member task permissions, silently change email matching or remove compatibility aliases.
+
+Use `npm.cmd run dev:local` for local interactive startup; it preserves the non-local on-disk MONGO_URI. Use only the guarded MONGODB_TEST_URI/pcb_test fixture for automated database tests; never substitute the development database or Atlas, reset a replica set or delete existing data to force tests to pass. Inspect fixture ownership/cleanup before extensions. Preserve user-selected local origins/routes; production configuration remains a separate task.
+
+Never expose actual environment secrets or put them in Git, tests or documentation. Keep audit-only scopes read-only; this implementation was separately authorized. Report actual pass/fail/skip outcomes and distinguish mocked SMTP, real MongoDB, browser and deployment verification. Do not send real email without explicit authorization. Maintain historical IDs and unresolved acceptance criteria instead of erasing findings when their status changes.

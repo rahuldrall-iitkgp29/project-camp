@@ -1,322 +1,232 @@
 # PCB audit and implementation backlog
 
-## Full backend implementation — 2026-10-18
+## Current implementation — 2026-10-18
 
-All **33 PRD method/path contracts** are registered, plus the requested invitation-acceptance endpoint and two legacy member aliases. **B01–B30 are resolved at the documented isolated-test/source level**: 17 fixes were already present when this session began, ten original open findings were fixed here, and B28–B30 record additional verified defects. No live MongoDB/SMTP or production readiness claim is made.
+Baseline remains **master**, commit **d26480cfabc1794f13a65ace77be0ede78d27c13**, plus preserved pre-existing changes. The user authorized source/test/local configuration fixes after the read-only audit. **E01 and B31–B33 are now resolved and verified.** Existing controller/route/model/field names, all 33 PRD registrations, dependencies, PRD.md and the staged README deletion were preserved.
 
-**Latest executed suite: 50 passed, 0 failed, 1 skipped.** The skipped test requires an explicitly configured isolated MongoDB replica set. The user confirmed none is available. Existing uncommitted authentication work was preserved; PRD.md and package-lock.json remain unchanged.
+**Final suites: 57 unit/mocked passed, 6 integration passed, zero failed/skipped.** Integration is one guarded parent fixture plus five lifecycle subtests. All **44 JavaScript files** and the PowerShell script parsed. Actual .env validation, disconnected app import and normal entrypoint startup through the explicit local launcher passed. The API startup check was stopped; local MongoDB 8.0.34 remains **rs0 PRIMARY**.
 
-User decisions: verified users can create projects and become their Admin; invitations require acceptance for both existing and new users; account actions remain usable before email verification. See [implementation decisions](docs/implementation-decisions.md). Membership addition therefore returns a pending invitation instead of granting immediate access; singular /member aliases remain.
+**64 checkpoints: 60 PASS, 4 PARTIAL, 0 FAIL, 0 UNVERIFIED.** Endpoint subset: **32 PASS, 1 PARTIAL**. Remaining PARTIAL checkpoints R02/R44/R58/R63 concern broader authentication/security and real delivery verification, not an absent endpoint. No completion percentage or production-readiness claim is made.
 
-Project mutations now use MongoDB transactions and serialize writes through Project.__v. Startup requires a replica set/sharded cluster and successful index initialization. Last-Admin protection, assignment cleanup, scoped task/subtask/note CRUD, upload limits/metadata/public downloads, durable deletion jobs, auth throttling and safe profiles are tested. Existing duplicate memberships must be reviewed before the unique index can be deployed.
+PASS means implementation plus relevant available verification supports the stated contract. PARTIAL means an incomplete requirement or outstanding security/deployment verification. FAIL means absent/fundamentally broken. UNVERIFIED means evidence is insufficient. Passing mocked SMTP proves notification generation/acceptance handling, not real inbox delivery; HTTP cookie/CORS tests do not prove browser behavior.
 
-Remaining release gates: **P01/P02/T03/D04** real database/index/concurrency verification; **P08** shared abuse controls and reset failure/timing enumeration; **P09** persistent storage and crash-orphan reconciliation; **P10/P12** browser/proxy and real SMTP/operations. Public attachments are deliberately public under the PRD. Signature checks are not malware scanning. No unanswered Admin/invitation policy question remains.
+Evidence: **A** tests/auth.test.js; **P** tests/project.test.js; **C** tests/contracts.test.js; **S** tests/mongodb-safety.test.js; **I** tests/integration.test.js and tests/helpers/integration-lifecycle.js. C checks all 33 registrations; A/P use real HTTP, JWT/bcrypt and Mongoose behavior with mocked collections; I uses real local MongoDB, indexes, transactions and disk with mocked SMTP.
 
-The prior authentication implementation section below is a historical snapshot. Current checklist rows and each finding's latest resolution note take precedence.
+## Backend-ready gate
 
-## Historical authentication implementation — 2026-10-17
+**No confirmed source-code blocker from E01/B31–B33 remains. Core API/persistence checks support beginning controlled local frontend integration. Full browser sign-off remains open.**
 
-The user authorized authentication fixes after the read-only audit and selected: **allow unverified account actions; require verification for all project access**. Existing files, exported names, model names, route paths, and persistence identifiers were preserved. A new tokenVersion field and a refreshToken response alias are additive; the existing refrershToken response key remains available.
+- [x] **E01:** actual .env passes unchanged validateEnvironment; independent crypto.randomBytes(48) secrets replace the reused secrets; local URLs match the user-selected client. Unrelated values and both MongoDB URI values preserved.
+- [x] **B31/B32/B33:** protocol/mail defects fixed with executed regressions; see resolution record below.
+- [x] **T02/T03 core gate:** real register/verify/login, existing/new invitations, roles, two projects, tasks/subtasks/notes, uploads/cascades/rollback, refresh/logout/reset/change/expiry/replay passed with owned-resource cleanup.
+- [x] **P10 decisions and HTTP contracts:** user selected http://localhost:5173, /reset-password/:token and /invitations/:projectId/:token. Credentialed CORS/preflight, cookie attributes/precedence and denied Origin checks passed at HTTP level.
+- [x] **Local startup:** npm.cmd run dev:local uses separate pcb_development via a process-only MONGO_URI override and executes src/index.js. Configuration/topology/index initialization, health and error probes passed. .env MONGO_URI remains untouched.
+- [ ] **P10/T06 browser sign-off:** implement the selected client pages and verify actual browser login, credentials, refresh coordination, logout and link handoff. Keep localhost on both client/API for the local cookie flow. Acceptance: browser tests pass without CORS/cookie workarounds; pre-login/missing-Origin CSRF and HTTPS/proxy policy are reviewed before deployment.
+- [ ] **T02/P12 live mail:** verify configured sender/TLS/inbox and delivery failure handling only with explicit external-send authorization. Acceptance: real verification/reset/invitation links reach intended inboxes without secrets in logs.
+- [ ] **Production gates:** P01/P02/P08/P09 and D04–D06 below remain. These do not require adding unrelated APIs before local frontend work.
 
-**17 of the 27 confirmed audit findings are resolved in this patch:** B01–B05, B07–B16, B23–B24. B06, B17–B22, B25 (task-read status remaining), B26, and B27 remain open. P06 is resolved by the user's decision; P07's code changes are implemented, with actual MongoDB concurrency verification still pending.
+Next concrete step: start the local API with `npm.cmd run dev:local` and implement/test the selected frontend authentication and invitation/reset pages using [docs/frontend-integration.md](docs/frontend-integration.md). No frontend files or browser harness were created in this task. Ordinary npm start/dev still use the original application URI; use the explicit local launcher here.
 
-Implemented in existing auth modules: typed validation, exact password handling, email/password login, trusted verification/reset links, truthful mail failure responses, single-use temporary tokens, conditional refresh rotation with unique JWT IDs, session revocation on logout/password changes, hidden internal user fields, and JSON errors. Startup/import/configuration prerequisites and project verification/membership gates were repaired. Member-role upserts now also enable schema validation.
+## B31–B33 / E01 resolution record
 
-Added [tests/auth.test.js](tests/auth.test.js), using Node's built-in test runner. It starts a loopback HTTP server and substitutes only MongoDB collection methods and Nodemailer transport; Express, Mongoose casting/save hooks, bcrypt, JWT and Mailgen execute normally.
+Original findings remain recorded for continuity; this section supersedes their audit-only open status.
 
-### Verification actually executed for this implementation
+- [x] **B31 — confirmed bug, medium / P1, resolved.** Unsupported charset/content encoding and malformed compression previously returned sanitized 500. src/app.js now recognizes actual parser types, tracks parser provenance with a WeakSet, and maps gzip/deflate errors and Brotli format errors to 400. Unsupported charset/encoding is 415, malformed JSON 400, limits 413, internal faults still sanitized 500. CORS precedes parsing so approved clients can read errors. A exercised malformed JSON; unsupported charset/encoding; invalid/truncated gzip, deflate and Brotli; plain/compressed oversized bodies; and valid compressed bodies reaching an injected internal error with a misleading zlib code that still returns 500. No broad status-code passthrough was added.
+- [x] **B32 — confirmed bug, low / P2, resolved.** Case-sensitive string replacement rejected bearer/BEARER. verifyJWT now parses the complete scheme plus SP-separated token case-insensitively, rejecting missing credentials, wrong schemes, embedded whitespace and comma-separated tokens. Cookie precedence is unchanged. A passed casing/malformed/invalid/expiry and valid-cookie-versus-invalid-header/invalid-cookie-versus-valid-header cases. JWT verification, algorithms and token-version rules remain intact.
+- [x] **B33 — confirmed bug, medium / P1, resolved.** Exact comparison rejected accepted IDN SMTP envelopes. recipientIdentity in mail.utils.js compares IDNA ASCII lowercase domains and semantically equivalent local-part quoting, preserving local-part case and stored account-email policy. A uses installed MailComposer normalization for ordinary, Unicode-domain, Unicode-local-part and quoted addresses through register/resend/forgot flows; equivalent domain acceptance, wrong mailbox/case, empty/invalid recipients and transport failure checks pass. I also exercises IDN invitations and registration against real DB. Genuine rejection remains 502; no real mail was sent.
+- [x] **E01 — environment limitation, high / P0, resolved.** Actual SERVER_URL/FORGOT_PASSWORD_REDIRECT_URL and equal signing secrets previously failed validation. .env now contains independently generated strong secrets, a local SERVER_URL matching PORT, and approved client URLs/CORS. PROJECT_INVITATION_REDIRECT_URL was added for the chosen landing route. Actual validation and local startup passed without weakening the validator. MONGO_URI and MONGODB_TEST_URI values were preserved; a named local launcher avoids the non-local URI.
 
-- `npm test`: **24 passed, 0 failed** in the final run. The first sandbox attempt failed with `spawn EPERM`; the authorized rerun outside that restriction passed. An earlier 21-test run also passed; additional role/ID, revocation-interleaving and URL-configuration tests brought the final count to 24.
-- `node test-eval.js`: passed; the application module graph now imports.
-- `node --check`: all **26** JavaScript files in src/ and tests/ passed.
-- `git diff --check`: passed.
-- No live database connection, real SMTP send, dependency installation, migration, environment-file change, or Git history change was performed. package-lock.json and dependency declarations are unchanged.
-- Concurrent HTTP calls and controlled revocation interleaving are tested against an in-memory collection adapter. These do **not** constitute real MongoDB concurrency/deployment tests.
+## PRD compliance — all 33 endpoints
 
-### Current operational/compatibility notes
+All paths below start with /api/v1. Actual preserved spellings appear here; Express case-insensitive routing satisfies the PRD's lowercase forgot-password path, and the verification parameter's spelling does not change URL matching. Project creation follows the existing user-approved interpretation: a verified user creates a project and receives its Admin membership.
 
-- Account creation/verification and reset links need valid HTTP(S) SERVER_URL and FORGOT_PASSWORD_REDIRECT_URL values. Request Host headers are not used for verification links.
-- Cookies use HttpOnly and SameSite=Lax; Secure is enabled when NODE_ENV=production. Cross-site browser/proxy deployment still needs P10 verification.
-- tokenVersion defaults to zero; old documents/JWTs without it are treated as zero until revocation. Logout/reset/change increments it and clears the saved refresh token. No migration or existing-data write was performed by this session.
-- New passwords retain the existing six-character minimum, are not trimmed, and must fit bcrypt's 72-byte UTF-8 limit. Legacy weak passwords can still authenticate for recovery; existing passwords that were historically trimmed must be entered as previously stored or reset.
-- Invalid credentials use 401, invalid/replayed temporary tokens 400, malformed validated fields 422, duplicate accounts 409, mail failures 502, and unverified/nonmember project access 403.
-- Known/unknown forgot-password requests share the same normal 200 response. Timing and SMTP-failure distinctions, registration enumeration, rate limiting, real MongoDB/SMTP tests, and deployment behavior remain outstanding security/release work.
-- Project list joins (B06), plural member collection URLs (B27), task/subtask/note/attachment implementation, and non-auth project integrity issues remain outside this patch.
-
-
-
-Audit date: 2026-10-17. Baseline commit: `e4259b62c038f92138f61ce4ee9f72947b08cd1f` (`master`, subject `update`).
-Scope: the original audit was read-only. The user subsequently authorized authentication implementation; the section above records the completed patch. The current user has since authorized full backend implementation; the earlier scope restriction is historical.
-The actual PRD filename is [PRD.md](PRD.md), with uppercase letters; preserve that filename, especially on case-sensitive systems.
-
-## Overall audit summary
-
-The Express/Mongoose API now implements all 33 PRD endpoint contracts plus invitation acceptance, with 50 passing isolated tests and one skipped real-database integration test. Production readiness is still gated by real MongoDB/index/concurrency, SMTP and deployment verification.
-
-The original audit contained 27 confirmed bugs, 12 potential issues and six feature groups. All original confirmed findings now have fixes and isolated verification; B28–B30 add three further resolved findings. Potential operational risks remain explicitly open. Original evidence is retained alongside current resolution notes.
-
-README has been corrected with measured setup/API behavior. requiredThings.md retains its older assessment with an explicit historical notice; its percentages are not current evidence.
-
-### Original audit scope and continuing evidence rules
-
-- Read all 180 lines of PRD.md, all 25 JavaScript source files, package.json, package-lock.json metadata, README.md, requiredThings.md, ignore/format configuration, directory notes/placeholders, and local learning notes/commands/test-eval.js.
-- Enumerated hidden and ignored project files, excluding Git internals and dependency trees. Dependency metadata and relevant installed module behavior were inspected; this is not an audit of every vendored dependency.
-- Inspected .env **variable names only**; no credentials or values are recorded. No ancestor or repository AGENTS.md was found.
-- Initial Git status was clean: `## master...origin/master`. Neither task.md nor history.md existed.
-- **Confirmed** means the defect follows directly from source or an isolated read-only probe. A confirmed dormant defect is explicitly identified as unreachable through current routes.
-- **Potential** means an observed design gap has a conditional impact, needs an integration/concurrency check, or depends on an unspecified product/deployment policy.
-- Evidence locations in original finding descriptions refer to the audit baseline. Checked entries record subsequent fixes; use current function names/code and the implementation section for the latest behavior.
-- Severity: **Critical** blocks the whole service or represents comparable impact; **High** affects authorization, account/data integrity, or essential functionality; **Medium** affects a bounded workflow, contract, or reliability; **Low** is minor consistency/documentation impact.
-- Priority: **P0** security/data integrity and minimum startup prerequisite; **P1** broken functionality and mandatory PRD features; **P2** complete validation/testing/deployment gates; **P3** optional improvements. Add focused regression checks alongside each authorized fix.
-
-## PRD compliance checklist
-
-These are **64 audit checkpoints**, not 64 independent features: endpoint requirements, cross-cutting requirements, permission rows, and success criteria intentionally overlap. Counts are not a completion percentage.
-
-**PASS: 59 | PARTIAL: 5 | FAIL: 0 | UNVERIFIED: 0.**
-
-PASS means the narrow source/request contract is implemented and exercised by isolated HTTP/contract tests; database/SMTP boundaries are mocked. It does not prove live MongoDB, inbox delivery or deployment behavior. PARTIAL identifies remaining requirements or release verification. FAIL means absent/unusable; UNVERIFIED means no adequate evidence or unresolved policy. All database-dependent PASS rows inherit the T03/D04 integration limitation.
-
-### Core features and all 33 PRD endpoints (§3, §4.1)
-
-Paths below are the **required** paths. See history.md for actual route spellings.
-
-| ID | Progress | Requirement | Status | Evidence / remaining work |
+| ID | Done | Required/actual route | Status | Current evidence or limitation |
 | --- | --- | --- | --- | --- |
-| R01 | [x] | POST /api/v1/auth/register; registration with verification | PASS | Registration and verification state, duplicate races, exact password hashing and SMTP failures exercised in auth HTTP tests. |
-| R02 | [ ] | POST /api/v1/auth/login; secure JWT login | PARTIAL | Email/password login, dummy bcrypt comparison and in-process throttling pass; shared gateway controls and timing analysis remain P08. |
-| R03 | [x] | POST /api/v1/auth/logout; secured logout | PASS | Logout clears cookies and refresh state, increments tokenVersion and rejects prior credentials in HTTP tests. |
-| R04 | [x] | GET /api/v1/auth/current-user; secured user info | PASS | Current-user/login/register projections exclude password, temporary tokens, session version, __v and avatar.localPath; tested. |
-| R05 | [x] | POST /api/v1/auth/change-password | PASS | Password-change route completes, validates inputs and revokes prior sessions; HTTP regression passes. |
-| R06 | [x] | POST /api/v1/auth/refresh-token | PASS | Cookie/body refresh rotation, unique jti, compatibility alias and replay/interleaving denial pass; live DB test remains T03. |
-| R07 | [x] | GET /api/v1/auth/verify-email/:verificationToken | PASS | Mounted verification URL, expiry and atomic consumption pass; internal verficationToken spelling preserved. |
-| R08 | [x] | POST /api/v1/auth/forgot-password | PASS | Typed email, generic normal response and truthful SMTP failures pass; failure-path enumeration remains P08. |
-| R09 | [x] | POST /api/v1/auth/reset-password/:resetToken | PASS | Password validation, expired/replayed token denial and atomic reset/session revocation pass against the collection adapter. |
-| R10 | [x] | POST /api/v1/auth/resend-email-verification; secured | PASS | Secured resend, unverified account access, already-verified denial and mail-failure recovery pass. |
-| R11 | [x] | GET /api/v1/projects/; user projects with member counts | PASS | getProjects joins the existing project field; zero/one/multiple projects and member counts pass in the aggregation adapter. |
-| R12 | [x] | POST /api/v1/projects/; name and description | PASS | Validated creation and creator Admin membership share a transaction; injected membership-write failure rolls back in tests. |
-| R13 | [x] | GET /api/v1/projects/:projectId; membership required | PASS | Membership/verification gates and missing-project handling pass; knowing another project ID does not grant access. |
-| R14 | [x] | PUT /api/v1/projects/:projectId; Admin only | PASS | Admin gate, partial typed fields, runValidators and transaction authorization recheck pass. |
-| R15 | [x] | DELETE /api/v1/projects/:projectId; Admin only | PASS | Admin cascade covers tasks/subtasks/notes/members/invitations/file jobs; injected failure rollback and retry pass in mocks. |
-| R16 | [x] | GET /api/v1/projects/:projectId/members | PASS | Plural members collection registered and tested for all roles; singular member alias preserved. |
-| R17 | [x] | POST /api/v1/projects/:projectId/members; Admin only | PASS | Admin POST sends pending invitations for existing/new accounts; authenticated verified acceptance is required and tested. |
-| R18 | [x] | PUT /api/v1/projects/:projectId/members/:userId; Admin role management | PASS | Admin role updates validate enums and retain a last Admin; scoped updates/concurrent demotions pass in mocks. |
-| R19 | [x] | DELETE /api/v1/projects/:projectId/members/:userId; Admin removal | PASS | Admin removal retains a last Admin and clears task assignments atomically; rollback and removed-member denial pass. |
-| R20 | [x] | GET /api/v1/tasks/:projectId; project task list | PASS | task.route.js mounted; all-role task listing returns 200 with safe populated assignees. |
-| R21 | [x] | POST /api/v1/tasks/:projectId; task title, description, assignee | PASS | Task creation validates fields/status/assignee membership and accepts bounded multiple uploads; HTTP/disk tests pass. |
-| R22 | [x] | GET /api/v1/tasks/:projectId/t/:taskId | PASS | Task detail matches both taskId and projectId and returns safe assignee/subtask details; cross-project denial passes. |
-| R23 | [x] | PUT /api/v1/tasks/:projectId/t/:taskId; fields/status | PASS | Admin/Project Admin partial task updates, all three statuses, null unassignment and attachment append/cap pass. |
-| R24 | [x] | DELETE /api/v1/tasks/:projectId/t/:taskId | PASS | Privileged task deletion removes subtasks and queues files transactionally; rollback/retry tested. |
-| R25 | [x] | POST /api/v1/tasks/:projectId/t/:taskId/subtasks | PASS | Privileged subtask creation verifies the parent task belongs to the project; success/missing/foreign parent tests pass. |
-| R26 | [x] | PUT /api/v1/tasks/:projectId/st/:subTaskId; details/completion | PASS | All roles may set boolean isCompleted; only privileged roles may edit title; parent-project checks pass. |
-| R27 | [x] | DELETE /api/v1/tasks/:projectId/st/:subTaskId | PASS | Admin/Project Admin subtask deletion checks task/project relationship; missing/foreign child tests pass. |
-| R28 | [x] | GET /api/v1/notes/:projectId | PASS | note.route.js mounted; all-role project-scoped note listing passes. |
-| R29 | [x] | POST /api/v1/notes/:projectId; Admin only | PASS | Admin-only note creation validates nonempty bounded content and project existence; HTTP tests pass. |
-| R30 | [x] | GET /api/v1/notes/:projectId/n/:noteId | PASS | Single-note reads require membership and matching project; missing/foreign note tests pass. |
-| R31 | [x] | PUT /api/v1/notes/:projectId/n/:noteId; Admin only | PASS | Admin note updates validate content and use scoped validated writes; tests pass. |
-| R32 | [x] | DELETE /api/v1/notes/:projectId/n/:noteId; Admin only | PASS | Admin note deletion is project-scoped and handles missing resources; tests pass. |
-| R33 | [x] | GET /api/v1/healthcheck/; system status endpoint | PASS | Mounted public health endpoint passes HTTP tests; liveness only. |
+| R01 | [x] | POST /api/v1/auth/register | PASS | A/I real registration, hashing/verification; normalized SMTP mocked; B33 closed |
+| R02 | [ ] | POST /api/v1/auth/login | PARTIAL | A/I login/expiry/revocation passes; P08 operational abuse/verification remains |
+| R03 | [x] | POST /api/v1/auth/logout | PASS | A revocation/replay/cookie checks |
+| R04 | [x] | GET /api/v1/auth/current-user | PASS | A/I safe projection, cookie/header auth; B32 casing regressions pass |
+| R05 | [x] | POST /api/v1/auth/change-password | PASS | A hash, old-password, revocation |
+| R06 | [x] | POST /api/v1/auth/refresh-token | PASS | A body/cookie/replay; I concurrent rotation |
+| R07 | [x] | GET /api/v1/auth/verify-email/:verficationToken | PASS | A/I verification/resend/expiry/replay |
+| R08 | [x] | POST /api/v1/auth/forgot-Password | PASS | A/I reset initiation and IDN acceptance; actual inbox delivery remains T02 |
+| R09 | [x] | POST /api/v1/auth/reset-password/:resetToken | PASS | A/I real reset/expiry/reuse rejection and session revocation |
+| R10 | [x] | POST /api/v1/auth/resend-email-verification | PASS | A/I resend after expiry, already-verified denial; B33 closed |
+| R11 | [x] | GET /api/v1/projects | PASS | P zero/one/multiple; I real member-count aggregation |
+| R12 | [x] | POST /api/v1/projects | PASS | P rollback; I real project + creator membership |
+| R13 | [x] | GET /api/v1/projects/:projectId | PASS | P parent/access/read |
+| R14 | [x] | PUT /api/v1/projects/:projectId | PASS | P role, typed partial update |
+| R15 | [x] | DELETE /api/v1/projects/:projectId | PASS | P rollback/cascade/files; I child/create race |
+| R16 | [x] | GET /api/v1/projects/:projectId/members | PASS | P all roles, safe profiles, legacy alias |
+| R17 | [x] | POST /api/v1/projects/:projectId/members | PASS | P/I existing/new IDN invitations, pending/acceptance/rotation/expiry; B33 closed |
+| R18 | [x] | PUT /api/v1/projects/:projectId/members/:userId | PASS | P role/enum/last-Admin/concurrent demotion |
+| R19 | [x] | DELETE /api/v1/projects/:projectId/members/:userId | PASS | P assignment cleanup/rollback; I last-Admin denial |
+| R20 | [x] | GET /api/v1/tasks/:projectId | PASS | P roles/population/status 200 |
+| R21 | [x] | POST /api/v1/tasks/:projectId | PASS | P validation/uploads; I real creation/assignee |
+| R22 | [x] | GET /api/v1/tasks/:projectId/t/:taskId | PASS | P scoped aggregation, population and missing child |
+| R23 | [x] | PUT /api/v1/tasks/:projectId/t/:taskId | PASS | P CRUD/status/null assignment/upload caps |
+| R24 | [x] | DELETE /api/v1/tasks/:projectId/t/:taskId | PASS | P cascade/files/rollback; I Member denial |
+| R25 | [x] | POST /api/v1/tasks/:projectId/t/:taskId/subtasks | PASS | P parent/role checks; I creation |
+| R26 | [x] | PUT /api/v1/tasks/:projectId/st/:subTaskId | PASS | P all roles/parent/boolean; I Member completion |
+| R27 | [x] | DELETE /api/v1/tasks/:projectId/st/:subTaskId | PASS | P missing/foreign parent and privileged deletion |
+| R28 | [x] | GET /api/v1/notes/:projectId | PASS | P role/parent/list/population |
+| R29 | [x] | POST /api/v1/notes/:projectId | PASS | P role, trimmed bounded content |
+| R30 | [x] | GET /api/v1/notes/:projectId/n/:noteId | PASS | P parent substitution/missing/read |
+| R31 | [x] | PUT /api/v1/notes/:projectId/n/:noteId | PASS | P scoped update/validation/roles |
+| R32 | [x] | DELETE /api/v1/notes/:projectId/n/:noteId | PASS | P scoped delete/roles/missing |
+| R33 | [x] | GET /api/v1/healthcheck | PASS | A mounted liveness HTTP |
 
-### Data, security, file management, and collaboration (§3, §4.3, §5–6)
+## Other PRD checkpoints
 
-| ID | Progress | Requirement | Status | Evidence / remaining work |
+| ID | Done | Requirement | Status | Current evidence or limitation |
 | --- | --- | --- | --- | --- |
-| R34 | [x] | Role values admin, project_admin, member | PASS | Existing admin/project_admin/member values retained; request/schema validation and role matrix tested. |
-| R35 | [x] | Status values todo, in_progress, done | PASS | Existing todo/in_progress/done values retained; all statuses exercised through task update. |
-| R36 | [x] | Multiple task attachments | PASS | Multiple files supported on task POST/PUT, capped at five total; duplicate client filenames get unique stored names. |
-| R37 | [x] | Store files in public/images | PASS | Files stored in public/images using an absolute module-relative path; HTTP upload/download tests pass. |
-| R38 | [x] | Attachment URL, MIME type, size metadata | PASS | Metadata preserves attachements, url, mimeTypes and size; stored-filename URL retrieval tested. |
-| R39 | [x] | Secure Multer upload handling | PASS | Multer count/size/field/type limits, MIME signatures, safe names, download headers and failed-write cleanup tested; P09 operations remain. |
-| R40 | [x] | CORS configuration | PASS | CORS configuration and allowed/denied origins pass; static files also receive CORS headers. |
-| R41 | [x] | Input validation on all endpoints | PASS | Typed/bounded fields, resource IDs, tokens, enums, null/empty/malformed cases and upload errors covered across mounted APIs. |
-| R42 | [x] | JWT authentication with access/refresh tokens | PASS | Versioned JWT auth, unique refresh identities, conditional rotation and revocation pass isolated HTTP tests. |
-| R43 | [x] | Email verification for account security | PASS | User-approved verified-email gates protect project/task/subtask/note APIs; unverified account actions remain available. |
-| R44 | [ ] | Secure password reset | PARTIAL | Single-use reset, password policy, revocation and throttling pass; timing/failure-path enumeration and deployment checks remain P08/P10. |
-| R45 | [x] | Role-based authorization middleware | PASS | Every project/task/subtask/note route has JWT/verification and applicable role gates; writes recheck permission transactionally. |
-| R46 | [x] | Assign tasks to project team members | PASS | Both assignment paths require an existing user and membership in that same project; removal clears assignments. |
-| R47 | [x] | Project-list member counts | PASS | Project list aggregation reports exact fixture counts across zero/one/multiple memberships. |
-| R48 | [x] | Invite users via email: intended invitation semantics | PASS | User required acceptance including new accounts; hashed expiring invitations, SMTP failure and acceptance/replay tests pass. |
+| R34 | [x] | Role enum | PASS | admin, project_admin, member preserved; P role matrix |
+| R35 | [x] | Task status enum | PASS | todo, in_progress, done; P complete status cycle |
+| R36 | [x] | Multiple attachments | PASS | P/I multiple files, append/cap, persisted metadata and actual disk cleanup |
+| R37 | [x] | public/images storage | PASS | P real upload/download and cleanup; directory preserved |
+| R38 | [x] | Attachment URL/MIME/size | PASS | P/I persisted url/mimeTypes/size plus exact downloaded bytes |
+| R39 | [x] | Secure Multer handling | PASS | P MIME/signature/size/count/authorization; P09 operational limits |
+| R40 | [x] | CORS | PASS | A/P allowed/denied origins and static-file headers; P10 browser gap |
+| R41 | [x] | Input validation/errors | PASS | A/P/I typed/ID/enum checks; B31 parser/CORS/status regressions pass |
+| R42 | [x] | JWT access/refresh authentication | PASS | A/I rotation/version/expiry/replay; B32 complete scheme parsing fixed |
+| R43 | [x] | Email verification gate | PASS | A/P unverified accounts denied project resources |
+| R44 | [ ] | Secure password reset | PARTIAL | A/I reset/change revocation passes; P08 timing/enumeration and live delivery open |
+| R45 | [x] | Role middleware | PASS | P every resource family and transaction-time membership recheck |
+| R46 | [x] | Assign only project members | PASS | P missing/foreign assignee rejection/removal; I valid assignment |
+| R47 | [x] | Project member counts | PASS | P zero/multiple fixtures; I real aggregation |
+| R48 | [x] | Email invitations | PASS | P/I existing/new recipients, IDN SMTP normalization, single-use acceptance |
+| R49 | [x] | Project-creation policy | PASS | User-approved verified-user creation grants project Admin; P/I |
+| R50 | [x] | Admin project mutation | PASS | P denies lower roles; I create/delete behavior |
+| R51 | [x] | Admin member management | PASS | P role checks and last-Admin invariant; I denial |
+| R52 | [x] | Privileged task mutation | PASS | P both privileged roles; I Member deletion denial |
+| R53 | [x] | All project roles read tasks | PASS | P three-role lists/details and outsiders |
+| R54 | [x] | All roles update subtask completion | PASS | P boolean-only Member edits; I completion |
+| R55 | [x] | Privileged subtask create/delete | PASS | P both privileged roles; I create |
+| R56 | [x] | Admin note mutations | PASS | P both lower roles denied |
+| R57 | [x] | All project roles read notes | PASS | P list/detail, outsider and foreign-resource denial |
+| R58 | [ ] | Secure auth/authorization outcome | PARTIAL | Core A/P/I and local startup pass; P08/P10 deployment/browser security remains |
+| R59 | [x] | Complete project lifecycle | PASS | I full onboarding/collaboration/notes/uploads and real failure rollback; wider recovery P01 |
+| R60 | [x] | Task/subtask hierarchy | PASS | P CRUD/relationships/cascades; I parent/child creation and deletion |
+| R61 | [x] | RBAC implementation | PASS | P complete role policy; I selected restrictions |
+| R62 | [x] | File attachment workflow | PASS | P/I real DB plus disk metadata/download/append/delete/cascade rollback |
+| R63 | [ ] | Verification/reset notifications | PARTIAL | A/I notifications and normalized/rejected recipients pass; real SMTP/inbox unverified |
+| R64 | [x] | API documentation through endpoint structure | PASS | history.md route table plus docs/frontend-integration.md setup/contracts; README deletion preserved |
 
-### Permission matrix (§4.2)
+## Revalidation of previous B-series findings
 
-| ID | Progress | Requirement | Status | Evidence / remaining work |
-| --- | --- | --- | --- | --- |
-| R49 | [x] | Only Admin can create projects | PASS | User explicitly chose verified-user creation with creator Admin membership; per-project role model preserved. |
-| R50 | [x] | Only Admin updates/deletes projects | PASS | Admin-only project mutations denied to both lower roles; tested. |
-| R51 | [x] | Only Admin manages project members | PASS | Admin-only invite/role/removal gates, enum rejection and last-Admin protection pass. |
-| R52 | [x] | Admin/Project Admin creates/updates/deletes tasks | PASS | Both privileged roles can create/update/delete tasks; members are denied; tested. |
-| R53 | [x] | All three roles view tasks | PASS | All three project roles read lists/details; outsiders and unverified users are denied; tested. |
-| R54 | [x] | All three roles update subtask status | PASS | All three project roles update boolean subtask completion; members cannot edit title; tested. |
-| R55 | [x] | Admin/Project Admin creates/deletes subtasks | PASS | Admin/Project Admin subtask creation/deletion pass; member denial tested. |
-| R56 | [x] | Only Admin creates/updates/deletes notes | PASS | Only Admin can create/update/delete notes; both lower roles denied; tested. |
-| R57 | [x] | All three roles view notes | PASS | All roles read notes while cross-project access is denied; tested. |
+B01–B30 describe historical fixes, not new source changes in this task. Their existing regressions passed again in the final 57-test suite; the expanded real fixture adds persistence evidence. Original IDs and findings are retained; B31–B33 were fixed in the current authorized implementation.
 
-### Success criteria (§7)
+| ID | Current disposition / evidence |
+| --- | --- |
+| B01 | [x] Invalid pipeline import absent; app-only import and C passed. |
+| B02 | [x] main/start reference existing src/index.js; source parses. E01 is now resolved; actual local startup passed. |
+| B03 | [x] validate calls errors.isEmpty(); A/P malformed inputs reject before writes. |
+| B04 | [x] Both member-list aliases require membership; P outsider/role checks pass. |
+| B05 | [x] Password-change validator factory is invoked; A successful/rejected requests complete. |
+| B06 | [x] Singular project join/projection is consistent; P and I member-count aggregation pass. |
+| B07 | [x] Verification links target mounted /api/v1/auth path; A checks generated links. |
+| B08 | [x] SMTP rejection becomes 502 and registration explains persistence/retry; A/P. B33's separate false-failure case is now fixed. |
+| B09 | [x] Login accepts email/password without username; A/I. |
+| B10 | [x] refreshToken and retained refrershToken alias agree; A. |
+| B11 | [x] Logout/password reset/change clear refresh state and increment tokenVersion; A. |
+| B12 | [x] Auth public projections omit reset/verification/session internals; A. |
+| B13 | [x] dotenv/config precedes app evaluation in index.js; A/P CORS tests pass with test configuration. |
+| B14 | [x] Resource ID validators and BSON/Cast mapping exist; A/P malformed IDs return 400. |
+| B15 | [x] Central JSON error serialization exists and sanitizes faults; A/P. B31 parser cases now pass. |
+| B16 | [x] Member role validators and transactional invitation acceptance enforce enums; A/P. Old membership upsert behavior was replaced by authorized invitations. |
+| B17 | [x] Task controller uses User's default export; import and P pass. |
+| B18 | [x] References use registered lowercase user; P real Mongoose population with mocked collections passes. |
+| B19 | [x] URLs use actual UUID filenames; P downloads exact stored bytes. |
+| B20 | [x] Metadata preserves attachements/mimeTypes/size; P. |
+| B21 | [x] Task detail filters task plus project; all child APIs check parent relationships; P cross-project denial. |
+| B22 | [x] Assignment requires same-project membership and existing user; P invalid cases, I valid assignment. |
+| B23 | [x] Shared typed six-character/72-byte new-password validation, no trimming; A. |
+| B24 | [x] Missing/non-string refresh input yields 401; A. |
+| B25 | [x] Original registration/reset/task-read status mismatches are corrected; A/P/I. B31 is now resolved. |
+| B26 | [x] Current handoff documents reconcile implementation and measured claims. README deletion is preserved; the current entrypoint is docs/frontend-integration.md. Remaining historical-document cleanup is D07. |
+| B27 | [x] Plural member collection routes and retained singular aliases are mounted; C/P. |
+| B28 | [x] Empty accepted-recipient lists fail, instead of reporting success; A. B33 normalization now passes. |
+| B29 | [x] Auth/member/task/note projections hide private avatar paths and user internals; A/P. |
+| B30 | [x] Typed bounded project fields, partial-update validation and runValidators exist; P. |
 
-| ID | Progress | Requirement | Status | Evidence / remaining work |
-| --- | --- | --- | --- | --- |
-| R58 | [ ] | Secure authentication and authorization | PARTIAL | Authorization and auth regressions pass; live topology/concurrency, shared abuse controls and browser deployment remain release checks. |
-| R59 | [ ] | Complete project lifecycle | PARTIAL | Project lifecycle/rollback/cleanup passes in mocks; actual MongoDB transactions, indexes and existing-data integrity remain unverified. |
-| R60 | [x] | Hierarchical tasks and subtasks | PASS | Task/subtask CRUD, parent relationships, completion and cascades pass HTTP tests with mocked database. |
-| R61 | [x] | Role-based access control implementation | PASS | Permission matrix and transaction-time membership rechecks pass; user resolved Admin scope. |
-| R62 | [x] | File attachment capability | PASS | Multiple upload/download/update/delete flows pass with real local files and mocked DB transactions. |
-| R63 | [ ] | Verification and password-reset email notifications | PARTIAL | Verification/reset/invitation templates and failure handling pass with mocked SMTP; actual delivery remains unverified. |
-| R64 | [x] | Comprehensive API documentation through endpoint structure | PASS | README documents all module paths, fields, errors, roles, token transport, uploads, setup and test limitations. |
+## Potential risks and settled product decisions
 
-## Confirmed bugs
+No additional exploit is claimed from these observations. Completed work is identified explicitly; remaining acceptance criteria are future work.
 
-Checked findings have current resolution notes backed by source/import/isolated regression checks. Baseline evidence and recommendations are retained for traceability. No checkbox implies a live deployment, SMTP or database test.
-
-### Startup and reachable application defects
-
-- [x] **B01 — Critical / P0 — Application module graph fails to load.** Original audit evidence: `src/controllers/project.controlers.js:12` imports named `pipeline` from `nodemailer/lib/xoauth2/index.js`; the installed module does not export it. `src/app.js:29` always loads this controller through the project router. Running existing `node test-eval.js` exits 1 with that exact missing-export error. **Original recommendation:** remove the unused invalid import after authorization, preserving all existing project identifiers. Re-run the import check before server work. **Resolved in authentication patch:** Removed the unused invalid pipeline import; node test-eval.js and the HTTP suite now import the whole app successfully.
-
-- [x] **B02 — High / P0 — Production start entry does not exist.** Original audit evidence: `package.json:13–16` sets main/start to root `index.js`; only `src/index.js` exists. The dev script uses the latter. Existence check returned false for root index.js. **Original recommendation:** align the package entry/start script to the existing entry file; do not move/rename files. Do this only in an authorized implementation session. **Resolved in authentication patch:** package.json main/start now reference the existing src/index.js; no file was moved. Entry existence/syntax were checked; the real DB-connected server was not started.
-
-- [x] **B03 — High / P0 — All shared validation failures are ignored.** Original audit evidence: `src/middlewares/validtor.middleware.js:8`, `validate`, tests the function object `errors.isEmpty` instead of invoking it; the truthy function always calls next. In-memory registration probe recorded three validation errors and still advanced. Invalid email/weak passwords and invalid member roles can reach persistence; Mongoose required checks do not enforce all request policies. **Original recommendation:** invoke the emptiness check and return the existing 422 validation failure path; add malformed-input regression checks before enabling endpoints. **Resolved in authentication patch:** validate now invokes errors.isEmpty(); HTTP tests prove invalid registration and role payloads are rejected before controller writes.
-
-- [x] **B04 — High / P0 — Project member list lacks object-level authorization.** Original audit evidence: `src/routes/project.route.js:50–52` attaches getsProjectMembers with only the router-wide verifyJWT; `src/controllers/project.controlers.js:191–242` checks project existence, then returns its membership roles and user profiles without checking caller membership. After B01 is repaired, any authenticated account knowing another project ID can read this list via the singular member route. **Original recommendation:** require membership with an appropriate viewing-role allowlist before querying; verify denial using two unrelated projects. **Resolved in authentication patch:** The existing singular member-list route now requires an allowed project membership. Verified outsiders receive 403; a permitted member receives 200 in the mocked HTTP suite.
-
-- [x] **B05 — High / P1 — Change-password requests stall.** Original audit evidence: `src/routes/auth.route.js:54` passes `userChanggedCurrentPasswordValidator` as middleware rather than invoking the factory in `src/validators/index.validatorts.js:41`. The factory returns an array but neither sends a response nor calls next. In-memory invocation of the actual registered handler confirmed this. **Original recommendation:** instantiate the existing factory and test that valid and invalid requests complete. **Resolved in authentication patch:** The existing password-change validator factory is instantiated. Successful changes and rejected old/weak passwords complete in HTTP tests.
-
-- [x] **B06 — High / P1 — Project list cannot join project details/member counts.** Evidence: `src/controllers/project.controlers.js:17–66`, getProjects: lookup localField is `projects` (line 27), nested foreignField is `projects` (35), lookup output is `projects` (29), but unwind/projection use `project` (50/54). The real membership field is singular `project` in `src/models/projectmember.models.js:11`. The outer lookup cannot join normal documents; unwinding the existing scalar project ID does not turn it into the looked-up project document, so the intended project fields/member count cannot be obtained. The exact returned shape needs a MongoDB integration check; an always-empty result is not asserted. **Fix:** consistently join/project the existing singular relationship and explicitly select expected output fields; test zero/one/multiple projects and member counts. Do not rename the stored relationship. **Resolved in full backend implementation:** getProjects in src/controllers/project.controlers.js now consistently joins project; zero/one/multiple project/count fixtures pass in tests/project.test.js. Actual MongoDB aggregation remains in the skipped integration test.
-
-- [x] **B07 — High / P1 — Verification emails point to a nonexistent API prefix.** Original audit evidence: registerUser/resendEmailVerification in `src/controllers/auth.controler.js:60,230` generate `/api/v1/users/verify-email/...`; `src/app.js:35` mounts `/api/v1/auth`, and `src/routes/auth.route.js:37` defines the verification route there. **Original recommendation:** generate the mounted auth URL using a trusted configured public origin; preserve the existing route/controller names. The internal `verficationToken` spelling agrees between router and controller and is not itself a broken URL parameter. **Resolved in authentication patch:** Registration/resend links use the configured SERVER_URL and the existing /api/v1/auth route. Invalid URL configuration fails before creating an account.
-
-- [x] **B08 — Medium / P1 — Email failures are reported as success.** Original audit evidence: `src/utils/mail.utils.js:34–39`, sendingEmail catches sendMail rejection and only logs it. Register/resend/forgot controllers then report that email was sent (`src/controllers/auth.controler.js:54–78,224–243,315–332`). Tokens have already been persisted. **Original recommendation:** propagate or explicitly handle delivery failure with a deliberate retry/recovery policy and truthful responses; do not assume database rollback or successful delivery. **Resolved in authentication patch:** SMTP rejection becomes a sanitized 502. Registration explains that the account exists and verification can be retried via login/resend; the tests cover that recovery path.
-
-- [x] **B09 — Medium / P1 — Email login unnecessarily requires a username.** Original audit evidence: `src/controllers/auth.controler.js:85–87`, login rejects unless both email and username are truthy, then searches only email; `src/validators/index.validatorts.js:30–38` validates email/password only. Valid email/password requests fail without an unrelated username. **Original recommendation:** align the supported credential contract; for the existing email query, require email/password, and document any optional username behavior. No username-based login requirement is invented. **Resolved in authentication patch:** Login accepts email/password without username, preserves password whitespace, and uses a uniform 401 for invalid credentials.
-
-- [x] **B10 — Medium / P1 — Refresh response has an inconsistent token key.** Original audit evidence: `src/controllers/auth.controler.js:286` emits `refrershToken`; login emits `refreshToken` (121) and refresh input reads `refreshToken` (249). Cookie clients may continue working, but body-token clients cannot use one consistent field. **Original recommendation:** agree a backward-compatible response correction with the user; do not silently rename an existing API contract. **Resolved in authentication patch:** Refresh returns refreshToken and preserves refrershToken as an alias with the same value. Both body and cookie refresh flows are tested.
-
-- [x] **B11 — High / P0 — Password recovery does not revoke the saved session credential.** Original audit evidence: resetForgotPassword (`src/controllers/auth.controler.js:337–359`) changes password and clears temporary reset fields but leaves `refreshToken` intact; changeCurrentPassword (372–384) has the same omission. refreshAccessToken accepts the old stored token (263), and verifyJWT (`src/middlewares/auth.middleware.js:21–29`) has no password/session version check. A previously stolen refresh token remains usable after recovery. **Original recommendation:** invalidate refresh sessions on password reset/change and define access-token revocation or bounded lifetime; test replay. Change-password impact is dormant until B05 is fixed. **Resolved in authentication patch:** Password reset/change clear refresh/reset state and atomically increment tokenVersion. Both access and refresh credentials from the previous version are rejected; logout also revokes both.
-
-- [x] **B12 — Medium / P0 — User responses expose password-reset metadata.** Original audit evidence: login projection `src/controllers/auth.controler.js:97–99` and verifyJWT projection `src/middlewares/auth.middleware.js:23` exclude password, refresh, and verification fields but not `forgotPasswordToken`/`forgotPasswordTokenExpiry`; getCurrentUser returns req.user verbatim (auth controller:156–164). **Original recommendation:** explicitly exclude reset fields or use a consistent public-user projection. These are hashed token values, not directly redeemable plaintext reset tokens; this is unnecessary security-state disclosure, not a demonstrated account takeover. **Resolved in authentication patch:** Login/registration/current-user omit password/reset/verification/session internals, including tokenVersion; tested with a pending reset.
-
-- [x] **B13 — Medium / P1 — .env CORS settings load too late.** Original audit evidence: `src/index.js:2–7` statically imports app before executing dotenv.config; `src/app.js:18` constructs CORS using process.env during module evaluation. CORS_ORIGIN supplied only in .env is ignored in favor of the fallback. Pre-exported process environment values do work. **Original recommendation:** load configuration before constructing/importing app, preserving its structure and exports; check allowed and denied origins. **Resolved in authentication patch:** src/index.js evaluates dotenv/config before app construction. CORS origin entries are trimmed; allowed/denied CORS behavior is tested. A real configured deployment was not started.
-
-- [x] **B14 — Medium / P1 — Malformed path IDs become server errors.** Original audit evidence: `src/middlewares/auth.middleware.js:47–48` and `src/controllers/project.controlers.js:193,202,254–255,283–284` use findById/ObjectId construction without a syntax guard; project routes have no param validators. Task draft controllers have the same gap. Invalid IDs throw BSON/Cast errors and fall through as 500s. **Original recommendation:** validate IDs before permission/database work and map cast errors to a documented 4xx; keep missing-resource and forbidden cases deliberate. **Resolved in authentication patch:** Project permission middleware validates projectId, and the JSON handler maps BSON/Cast errors to 400. HTTP tests cover malformed projectId/userId. Full declarative validators for unfinished APIs remain M05.
-
-- [x] **B15 — Medium / P1 — API errors use Express's default HTML response.** Original audit evidence: `src/utils/asyncHandler.js:3` forwards errors; `src/utils/apiError.js:14–18` defines structured fields, but `src/app.js:31–43` installs no JSON error handler or JSON 404 fallback. ApiError statusCode is recognized by Express; its data/errors structure is not serialized. In non-production mode the default error response can include stack traces. **Original recommendation:** add a centralized sanitized JSON error response and consistent 404/cast/duplicate-key handling after authorization; preserve agreed response naming. **Resolved in authentication patch:** src/app.js now sends sanitized JSON for ApiError, 404, duplicate-key, validation/cast, malformed JSON, oversized-body and unexpected errors. The suite checks JSON 404/400/422/500 paths and hidden internal details.
-
-- [x] **B16 — High / P0 — Member addition can persist roles outside the role enum.** Original audit evidence: B03 ignores `addMemberToProjectValidator` errors; `src/controllers/project.controlers.js:172–185` upserts request role without runValidators. Mongoose schema enums do not run automatically for this update. The explicit check in updateMemberRole does not protect this other path. **Original recommendation:** enforce request and update validation on the upsert and verify enum rejection; audit existing role data with authorization. This causes invalid authorization state; an arbitrary invalid string is not automatically an admin escalation. **Resolved in authentication patch:** Member-add validators enforce string email/role and reject invalid enum values; its upsert enables runValidators. HTTP tests cover rejected roles/arrays/objects; live MongoDB role-data inspection remains pending.
-
-- [x] **B23 — High / P0 — Password policies are inconsistent and insufficient.** Original audit evidence: registration validators (`src/validators/index.validatorts.js:21–26`) trim and require six characters, while change/reset validators (41–69) only check nonempty; reset saves with validateBeforeSave:false (`src/controllers/auth.controler.js:359`). The in-memory reset validator accepts a one-character password even independently of B03; with B03, an empty string can also reach bcrypt hashing. Trimming at registration but not login silently changes passwords containing boundary spaces. **Original recommendation:** apply one explicit password policy to registration/change/reset, validate types and bcrypt's byte-length constraints, and avoid silently altering submitted passwords. Agree policy rather than inventing a PRD length requirement. **Resolved in authentication patch:** One password validator enforces the existing six-character minimum for new passwords and bcrypt's 72 UTF-8-byte limit, without trimming. Login/old-password checks allow shorter legacy credentials for recovery; typed/weak/multibyte cases are tested.
-
-- [x] **B24 — Medium / P1 — Empty refresh requests can throw before authorization handling.** Original audit evidence: `src/controllers/auth.controler.js:249` reads `req.body.refreshToken` without optional access, outside the try. Express 5 leaves req.body undefined for requests without parsed bodies; with no refresh cookie this throws a TypeError instead of the intended 401. **Original recommendation:** handle missing body/cookies defensively and validate token input before verification. **Resolved in authentication patch:** Refresh handles absent bodies/cookies and non-string credentials with 401; empty, object, array, invalid, expired-access and wrong-purpose cases are exercised.
-
-- [x] **B25 — Low / P2 — Response statuses are inconsistent.** Evidence: registration returns HTTP 201 with body `statuscode:200` (`src/controllers/auth.controler.js:73–75`); invalid reset tokens return nonstandard 489 (352); draft getTasks returns 201 for a read (`src/controllers/task.controler.js:23–25`). Duplicate registration uses 404 (auth controller:35), and absent project membership is reported as 400 (`src/middlewares/auth.middleware.js:51–52`). **Fix:** establish consistent documented 2xx/4xx meanings and update clients compatibly. Do not rename `ApiRespones` or `statuscode` without explicit permission. **Partial resolution:** auth registration/duplicate/reset-token statuses and missing-membership denial are corrected. Draft getTasks still returns 201; keep this item open. **Resolved in full backend implementation:** getTasks now returns HTTP/body 200. Auth and all new resource test helpers check HTTP/statuscode agreement; ApiRespones and statuscode preserved.
-
-- [x] **B26 — Medium / P2 — Existing documentation overstates working functionality.** Evidence: `README.md:14–26,31,44,60–67` claims complete CRUD/secure uploads, leaves a database placeholder, ambiguously marks refresh as requiring authentication, describes embedded subtasks despite their separate collection, and ends with an unclosed code fence and non-shell clone syntax. `requiredThings.md:19–22,51–58` claims working/stable components disproven above. **Fix:** after authorized code work, reconcile README and older audit claims with measured behavior and complete setup/request/error documentation. This audit preserves those files. **Resolved in full backend implementation:** README now documents measured behavior, setup, routes, fields, errors and limits. requiredThings.md has a historical notice. task.md/history.md carry actual checks and remaining limitations.
-
-- [x] **B27 — High / P1 — Member collection URL differs from PRD.** Evidence: `src/routes/project.route.js:51` registers GET/POST `/:projectId/member` (singular); PRD §4.1 requires `/:projectId/members`. The plural route with a trailing userId at line 61 does not cover the collection URL. **Fix:** obtain agreement for an additive compatible plural route or other explicit contract change; keep existing singular consumers working unless removal is authorized. **Resolved in full backend implementation:** project.route.js registers plural /members plus retained singular /member collection aliases. Route-contract and HTTP tests exercise both.
-
-### Confirmed dormant task/model defects
-
-These were dormant in the original audit. They have now been repaired and verified before task routes were mounted.
-
-- [x] **B17 — High / P1 — Task controller cannot be imported.** Evidence: `src/controllers/task.controler.js:1` imports named User; `src/models/user.models.js:122–123` exports only a default model. A standalone dynamic-import probe failed with the missing User export error. **Fix:** remove the unused named import or use the existing default export without renaming the model/file. **Resolved in full backend implementation:** task.controler.js uses the existing default User export; app/task module imports and mounted task HTTP tests pass.
-
-- [x] **B18 — High / P1 — User populate references cannot resolve.** Evidence: User is registered as `user` in `src/models/user.models.js:122`, while refs use `User` in `src/models/project.models.js:15`, `src/models/projectmember.models.js:8`, `src/models/task.models.js:20,24`, `src/models/subtask.models.js:20`, and `src/models/note.models.js:11`. Draft getTasks populates assignedTo (`src/controllers/task.controler.js:21`). An in-memory populated Task raised MissingSchemaError before any DB connection. **Fix:** align reference strings with the existing registered model name; changing model/collection names requires explicit permission. Aggregate lookups using collection `users` are a different mechanism and do not have this defect. **Resolved in full backend implementation:** User ref strings in project, projectmember, task, subtask and note models now match the existing lowercase user registration. Real Mongoose population through the collection adapter passes; no model/collection was renamed.
-
-- [x] **B19 — Medium / P1 — Attachment URLs omit the stored filename prefix.** Evidence: `src/middlewares/multer.middleware.js:9` stores Date.now()-originalname; `src/controllers/task.controler.js:41` generates URLs using originalname only. **Fix:** generate and safely encode URLs from the actual stored file.filename and configured public base; verify retrieval of multiple files with the same original name. **Resolved in full backend implementation:** attachmentMetadata builds URLs from UUID file.filename and SERVER_URL. HTTP tests retrieve both same-original-name uploads successfully.
-
-- [x] **B20 — Medium / P1 — MIME metadata is silently dropped.** Evidence: createTask produces `mimetype` (`src/controllers/task.controler.js:42`), while the schema accepts `mimeTypes` (`src/models/task.models.js:34`). An in-memory Task cast discarded mimetype. **Fix:** populate the existing schema field consistently; do not rename the persisted `attachements` or metadata identifiers without explicit permission. **Resolved in full backend implementation:** attachmentMetadata writes the persisted mimeTypes field under attachements. HTTP creation/update responses and byte sizes are checked.
-
-- [x] **B21 — High / P0 before task exposure — Task details ignore the project boundary.** Evidence: `src/controllers/task.controler.js:64–70`, getTaskById uses only taskId and never compares projectId. A future route gate authorizing project A would not prevent requesting a known task from project B. **Fix:** include both task and authorized project in the lookup; use equivalent parent checks for all task/subtask/note operations. This is a confirmed missing scope check, not a tested currently exploitable endpoint. **Resolved in full backend implementation:** getTaskById matches taskId plus projectId. All task/subtask/note reads and writes check parent scope; foreign/missing resource HTTP regressions pass.
-
-- [x] **B22 — Medium / P1 — Assignee need not exist or belong to the project.** Evidence: createTask casts assignedTo at `src/controllers/task.controler.js:51–53` and creates the task without querying User/ProjectMember. ObjectId refs do not enforce foreign keys. **Fix:** validate assignee existence and membership in that same project; decide reassignment behavior when a member leaves. **Resolved in full backend implementation:** validateAssignee requires User and same-project ProjectMember on both task creation/update within serialized transactions; invalid assignees and null unassignment pass.
-
-### Additional confirmed findings from the full implementation
-
-- [x] **B28 — Medium / P1 — SMTP recipient rejection could be reported as success.** sendingEmail previously awaited sendMail without checking accepted recipients. It now rejects unaccepted recipients with sanitized 502 and has a regression where transport resolves with an empty accepted list. SMTP timeouts and configurable sender were also added.
-- [x] **B29 — Medium / P2 — Public profiles included internal storage/version fields.** Auth projections retained __v/avatar.localPath; membership/task profile selections copied the entire avatar. Auth/current-user and populated/aggregated profiles now exclude those fields. Tests seed a private local path and verify it never appears in responses.
-- [x] **B30 — Medium / P1 — Project fields lacked type/bounds and update validation.** createProjectValidator only checked name nonempty, allowed whitespace/coerced values and left description unchecked; updateProject did not run schema validators. Typed trimmed bounded validation, partial-update validation and runValidators now reject null/arrays/objects/empty fields before writes. HTTP regressions pass.
-
-## Potential issues and policy questions
-
-Original observations are retained below; each Current assessment states what changed. Open items require live evidence or operational follow-up and must not be treated as demonstrated production incidents.
-
-- [ ] **P01 — High / P0 — Multi-document project writes are not atomic.** `src/controllers/project.controlers.js:84–97,137–150`: create writes Project before its creator membership; delete removes Project before child records. If a later operation fails, orphaned/inaccessible records remain, and retrying delete encounters 404 before cleanup. Concurrent task/member creation can also race with deletion. No transaction/session or compensating recovery exists. **Investigate/fix:** choose transactions on a compatible MongoDB deployment or an explicit idempotent recovery design; test failure injection and concurrency. No actual orphaned DB data was inspected. **Current assessment:** Implemented runTransaction/withProjectWrite, serialization through Project.__v, membership rechecks and transactional cascades. Failure injection passes; real transaction retry/isolation/topology checks remain T03/D04. Uncertain commits return 503 and retain potentially referenced uploads.
-- [ ] **P02 — High / P0 — Duplicate memberships are possible under concurrent upserts.** `src/models/projectmember.models.js:5–23` has no unique compound index; `src/controllers/project.controlers.js:172–185` uses unindexed user/project upsert. In-memory schema.indexes() returned []. **Investigate/fix:** inspect actual indexes/data with authorization, resolve any duplicates deliberately, and enforce uniqueness of the relationship. Do not assume the live DB lacks a manually created index. **Current assessment:** Declared unique (project,user) index plus user/project lookup index. Startup awaits model initialization; mocked duplicate races pass. No live indexes/data were inspected; existing duplicates need operator review before deployment.
-- [x] **P03 — High / P0 — Projects can lose all administrators; member removal leaves assignments.** `src/controllers/project.controlers.js:172–185,245–301` permits upserting/demoting/deleting the only admin, including self, without a last-admin invariant. createdBy is not an authorization fallback. deleteMember does not reassign Task.assignedTo. **Investigate/fix:** agree last-admin/creator ownership and reassignment rules; implement atomic checks if required. The PRD does not specify transfer or sole-admin policy. **Current assessment:** Implemented last-Admin protection under the project write lock and clearing removed-member assignments in the same transaction. Concurrent-demotion, rollback and removal HTTP regressions pass; historical authorship retained.
-- [x] **P04 — Medium / P1 — Invitation meaning is ambiguous.** `src/controllers/project.controlers.js:163–188` only adds existing accounts by email, sends no invitation, and returns 404 for unknown users. PRD §3.3 says “Invite users to projects via email” but gives no acceptance/onboarding contract. **Investigate/fix:** clarify whether email lookup alone is intended or whether notifications, acceptance, expiry, and unregistered invitees are needed; implement only the agreed behavior. **Current assessment:** Resolved by user: invitations require acceptance, including new accounts. ProjectInvitation model, hashed seven-day tokens, verified exact-email acceptance and rotation/replay/failure tests implemented. Browser onboarding needs PROJECT_INVITATION_REDIRECT_URL/client integration; no real SMTP was used.
-- [x] **P05 — High / P1 — Admin scope and project creation need a product decision.** `src/routes/project.route.js:29–34` allows any authenticated account to create; `src/controllers/project.controlers.js:91–96` grants creator admin. `src/models/user.models.js` has no global role; registration destructures role but never stores it (`src/controllers/auth.controler.js:28–45`). PRD matrix says Admin-only creation and calls admin “full system access,” while the project endpoint just says secured. **Investigate/fix:** clarify global versus per-project roles and first-project bootstrapping; do not accept client-selected admin roles as a shortcut. **Current assessment:** Resolved by user: verified users may create projects and become their project's Admin. No global user role or cross-project Admin override introduced.
-- [x] **P06 — High / P1 — Verification status does not restrict project access.** `src/controllers/auth.controler.js:82–127` and `src/middlewares/auth.middleware.js:12–33` never require isEmailVerified; unverified users receive normal sessions. PRD requires verification for security but does not specify the gate, and secured resend requires a usable authentication flow. **Investigate/fix:** define limited pre-verification access/resend and the operations requiring verification; avoid breaking resend by blindly blocking every login. **Resolved:** the user chose account access with verified-email-only project access; requireVerifiedEmail is mounted after verifyJWT on the project router and covered by HTTP tests. **Current assessment:** Verified-email gating now also covers task, subtask, note and invitation acceptance routes; every mutation and resource family tested.
-- [x] **P07 — High / P0 — Session rotation/revocation races and temporary-token reuse.** `src/controllers/auth.controler.js:10–19,247–275,180–193,346–359`: refresh comparison and replacement are separate writes, refresh saves twice, and temporary tokens use read-then-save. Concurrent requests can validate the same old token; same-second refresh signing with identical payload/iat can yield the same JWT (`src/models/user.models.js:96–104`). Logout clears refresh state but existing access JWTs remain valid until expiry. **Investigate/fix:** define session count/revocation semantics, rotate atomically with unique token identity, and consume reset/verification tokens atomically. Test races and replay in isolation; no replay exploit was run. **Implementation addressed:** tokenVersion revocation, unique refresh jti, conditional rotation, and single-operation temporary-token consumption replace these races. Replay/concurrent-call/interleaving checks pass against the test adapter; real MongoDB verification remains T02/T03. **Current assessment:** Existing conditional token rotation/revocation preserved and regressions rerun. Optional integration fixture includes real refresh races but was skipped without MONGO_TEST_URI.
-- [ ] **P08 — High / P0 — Abuse resistance and query typing need verification.** Login/registration/forgot/resend routes in `src/routes/auth.route.js:34–55` have no application rate limiter; response differences in `src/controllers/auth.controler.js:35,89–93,304–305` reveal account existence. B03 plus missing type checks lets malformed inputs reach queries. **Investigate/fix:** enforce scalar types, test object/operator payload rejection, add appropriate throttling and non-enumerating reset responses. Gateway controls are unknown; no NoSQL account-bypass exploit is claimed. **Partial mitigation:** auth body types are checked; login failures and normal forgot-password responses are uniform. Rate limits, timing analysis, gateway controls and failure-path enumeration still require work. **Current assessment:** Added bounded per-process IP/account throttling (100 per endpoint/15 minutes) and bcrypt work for unknown login accounts. Typed validators, normal reset response uniformity and HTTP 429 pass. Shared gateway limits, registration enumeration and forgot-password timing/502 distinctions remain open.
-- [ ] **P09 — High / P0 before uploads — Upload content, limits, access, and cleanup policy is incomplete.** `src/middlewares/multer.middleware.js:4–18` allows any type with a 1,000,000-byte per-file limit, no explicit file/field/part counts, and timestamp-plus-client filename collision risk. `app.js:11` serves public files without authentication, before CORS/security middleware; active content would share the API origin if accepted. `deleteProject` does not remove disk files; failed task creation has no cleanup. **Investigate/fix:** agree allowed types and attachment visibility (PRD explicitly specifies public/images), use collision-resistant safe names, validate content, bound aggregate input, arrange middleware order, and clean failed/deleted uploads safely. No current route accepts uploads, so remote upload exploitation is dormant. **Current assessment:** Implemented bounded Multer, MIME signature checks, UUID names, public attachment/nosniff/sandbox headers, cleanup and durable FileDeletion jobs. Real local uploads pass. Crash-before-persistence/uncertain-commit reconciliation, malware scanning and persistent/shared storage remain operational work. Legacy attachment filenames outside the new UUID format are deliberately not auto-deleted.
-- [ ] **P10 — Medium / P2 — Browser/proxy security depends on deployment.** Cookie options in `src/controllers/auth.controler.js:106–109,143–146,267–270` set httpOnly/secure but omit an explicit sameSite policy; cookie and bearer transports coexist. Verification URLs trust req.get("host")/req.protocol (60/230); there is no configured trusted-proxy strategy in app.js. **Investigate/fix:** test intended origins, HTTPS termination, cross-site cookies and CSRF protections; generate sensitive links from a trusted origin. No confirmed CSRF or host-header token theft was demonstrated. **Partial mitigation:** explicit SameSite=Lax, production-only Secure cookies and configured email-link origins are implemented. Cross-site/proxy/CSRF deployment verification remains open. **Current assessment:** Configured URL origins, SameSite=Lax/production Secure cookies and Origin checks for cookie writes pass isolated tests. Actual HTTPS, reverse proxy, cross-site browser behavior and distributed deployment remain unverified.
-- [ ] **P11 — Medium / P2 — Unbounded queries, indexing, and collision handling.** `getProjects`/`getsProjectMembers` aggregate whole result sets; `getTasks`/`getTaskById` have no pagination; cascade loads every task. Relationship schemas declare no query indexes beyond user/project-name uniqueness. Project names are globally unique (`src/models/project.models.js:7`) and email case is not normalized (`src/models/user.models.js:29–34`). **Investigate/fix:** measure query plans/size, agree pagination and uniqueness/case policy, and map duplicate-key races to a useful 4xx. Global project-name uniqueness is not itself forbidden by the PRD. **Current assessment:** Added relationship indexes and duplicate error mapping. Lists/cascades remain unpaginated; global project-name uniqueness and case-sensitive email matching are preserved pending measured/product decisions.
-- [ ] **P12 — Medium / P2 — Mail and operational configuration remain unverified.** `src/utils/mail.utils.js:7–9,17–27` uses placeholder product branding, a hardcoded sender, and MAILTRAP credentials; `src/db/database.js:3–10`/index.js exit on connection failure without a shutdown strategy; healthCheck is liveness only. **Investigate/fix:** validate required configuration, SMTP sender/domain/TLS/delivery, production database compatibility, safe error logging, readiness, and shutdown. No dependency vulnerability advisory scan or live deployment inspection was performed. **Current assessment:** Added early environment validation, SMTP timeouts/recipient acceptance checks, replica-set/index startup checks, sanitized startup errors, cleanup worker and bounded shutdown. Actual SMTP sender/TLS/delivery, deployment lifecycle and dependency advisories remain unverified.
-
-## Missing and incomplete PRD functionality
-
-- [x] **M01 — High / P1 — Task API.** Evidence: `src/app.js:25–37` mounts no task router; `src/routes/` has only auth/project/health files. `src/controllers/task.controler.js:11–139` contains three drafts, and updateTask/deleteTask at 141/143 are empty. Implement all five PRD task routes with JWT, project-role and parent checks, input validation, CRUD, status transitions using the three existing enum values, assignee membership, and deletion cleanup. Resolve B17–B22 first. Do not invent a member task-edit permission: §4.2 restricts task mutations to admin/project_admin. **Current resolution:** Completed: task.route.js mounted in app.js, all five task routes implemented with role/parent checks, typed validation, assignment/status/attachment handling and regression coverage.
-- [x] **M02 — High / P1 — Subtask API and member completion.** Evidence: `src/controllers/task.controler.js:145–149` has empty createSubTask/UpdateSubTask/deleteSubTask; `src/models/subtask.models.js` only supplies storage. Implement the three PRD routes, parent task/project ownership checks, details versus status field permissions, and all-role completion with admin/project_admin create/delete. Clarify whether members may edit titles; the matrix explicitly promises status updates. **Current resolution:** Completed: three subtask routes implemented; all-role boolean completion, privileged title/create/delete, parent scoping and missing resources tested.
-- [x] **M03 — High / P1 — Notes API.** Evidence: `src/models/note.models.js` exists; no note controller/router/validator or app mount exists. Implement all five PRD note routes, project-scoped reads for members and admin-only mutations, content validation, and missing-parent handling. **Current resolution:** Completed: note.controler.js/note.route.js implement all five scoped note routes with Admin-only writes, content validation and HTTP coverage.
-- [x] **M04 — High / P1 — Multiple attachments end to end.** Evidence: `src/middlewares/multer.middleware.js` is never imported by a route; draft createTask maps req.files only. Integrate authorized multi-file upload, public/images storage and retrievable metadata, enforce agreed security/size/count policy, and clean up on failed writes/deletion. Resolve B19/B20/P09. **Current resolution:** Completed: task POST/PUT integrate multi-file Multer, persisted metadata, public retrieval, caps/types/signatures and failure/deletion cleanup. Operational file risks remain P09.
-- [x] **M05 — High / P1 — Complete request validation and failure handling.** Evidence: `src/validators/index.validatorts.js` exports seven factories covering only some auth/project bodies; IDs, token inputs, full role updates, tasks, subtasks, notes, and uploads lack consistent validation. Complete typed/bounded validation and JSON errors across all required endpoints; fix B03/B05 first. **Partial implementation:** auth field/token checks, project permission ID checks and centralized JSON errors are now repaired. Complete validators for the unfinished feature APIs and project field updates remain. **Current resolution:** Completed for mounted request contracts: typed fields, IDs/tokens, empty/null/malformed payloads, roles/status and JSON upload/errors tested. External/deployment behavior remains T03/T06.
-- [x] **M06 — Medium / P1 — Finalize collaboration/access policy.** Evidence: P04/P05/P06 and PRD §3.1, §3.3, §4.2–4.3. Resolve invitation semantics, project creation/global admin scope, and pre-verification access with the user before implementing an assumed policy. This is unresolved specification work, not authorization to invent features. **Current resolution:** Resolved by user decisions on project creation and invitation acceptance; pre-verification account access policy retained. Details in docs/implementation-decisions.md.
-
-## Remaining tests and deployment work
-
-Node's built-in runner now reports 50 passed, 0 failed and 1 skipped. All PRD route registrations and applicable role contracts have isolated coverage; the guarded MongoDB integration suite is ready but unexecuted. CI, live SMTP/database, dependency advisories and deployment checks remain. README contains setup/request documentation.
-
-- [x] **T01 / P0:** Add focused regressions for B03, B04, B11, B16, and cross-project read/write denial; verify no persistence/email occurs after invalid input. Make app importability the setup prerequisite. **Progress:** focused B03/B04/B11/B16 regressions now pass; a real two-project integration fixture and broader data-integrity coverage remain. **Current verification:** Completed isolated regressions for the named bugs and cross-project read/write denial, including auth revocation between checks. Live transaction behavior belongs to T03.
-- [ ] **T02 / P1:** Exercise all ten auth endpoints: invalid/duplicate registration, email-password login, invalid/expired/replayed tokens, verification/resend, mail failures, body/cookie refresh, logout, password change/reset, public-user projections, and empty/malformed requests. **Progress:** all ten auth routes are exercised in tests/auth.test.js with mocked database/email; live integration and broader failure/concurrency coverage are still pending. **Current verification:** 27 auth HTTP tests pass with mocked collection/SMTP boundaries; real SMTP and full real-database auth integration still need execution.
-- [ ] **T03 / P0–P1:** Use an explicitly authorized isolated MongoDB fixture to test membership counts, project CRUD, duplicate memberships, last-admin policy, upsert enum validation, invalid IDs, cascading failure recovery, and simultaneous operations. **Current verification:** Added guarded tests/integration.test.js for real indexes/transactions/refresh and delete/create races. User confirmed no isolated replica set; skipped without MONGO_TEST_URI.
-- [x] **T04 / P1:** Cover every role against all 33 PRD endpoints, with no membership, wrong project, missing parent, removed member, and invalid assignee cases. Prove members can complete subtasks but cannot perform privileged task/note mutations. **Current verification:** Route-contract check covers all 33 PRD routes. HTTP tests cover each applicable project role, unauthenticated/unverified/outsider access, parent substitution and completion vs privileged edits.
-- [x] **T05 / P1:** Verify task/subtask/note CRUD and relations, statuses, uploads with multiple/duplicate filenames, MIME/size metadata, count/type/size limits, download URLs, and failed-write/deletion cleanup. **Current verification:** Task/subtask/note CRUD, assignment, local multiple uploads/downloads, metadata, limits, rollback and deletion retry pass with mocked persistence.
-- [ ] **T06 / P2:** Verify JSON error contracts and content types, HTTP status/body agreement, allowed/denied CORS origins, HTTPS cookie/SameSite behavior, proxy origin generation, CSRF policy, and rate limiting. **Current verification:** JSON/CORS/status, cookie attributes/Origin and throttling tests pass. Actual HTTPS/proxy/browser/CSRF deployment checks remain.
-- [x] **D01 / P0:** Repair entry/import blockers in an authorized session and repeat import checks before a service start; startup connects MongoDB and is outside this audit's checks. **Completed:** app imports, start/main point to src/index.js, and the local mocked HTTP suite passes. No real DB-connected start was attempted.
-- [x] **D02 / P2:** Declare/document a supported Node version. Current lock includes Mongoose/MongoDB packages requiring Node >=20.19.0; audited local runtime is Node 24.14.0. Run reproducible install/CI only when dependencies and filesystem changes are authorized. **Current verification:** README recommends tested Node 24 LTS and documents dependency minimum 20.19.0. No dependency versions or lockfile changed.
-- [x] **D03 / P2:** Validate required environment configuration early; publish variable names/safe examples, including origins, secrets, expiry formats, DB URI, SMTP, public server URL, and reset frontend URL. Never publish actual secrets. **Current verification:** env.utils.js validates required values/durations/URLs without logging secrets; README lists configuration names and safe examples. Unit checks pass.
-- [ ] **D04 / P2:** Verify MongoDB version/topology, indexes, uniqueness, backup/recovery, transaction support if chosen, and actual data integrity. Do not run migrations or cleanup without authorization. **Current verification:** Startup requires transactions and awaits declared indexes. Live data/index/topology/backups remain uninspected; no migrations executed.
-- [ ] **D05 / P2:** Verify HTTPS/proxy settings, static file persistence and permissions, deployment working directory (relative .env/public paths), SMTP sender/delivery, safe logs, error reporting, readiness, graceful shutdown, and startup/listen failures. **Current verification:** Module-relative static storage, cleanup retries, safe startup logging and bounded shutdown implemented. Real proxy/storage/lifecycle/SMTP deployment tests remain.
-- [ ] **D06 / P2:** Run an authorized dependency advisory/license review; integrity metadata is not a vulnerability scan. Add CI gates for tests/import checks and documentation consistency. **Current verification:** No advisory/license scan or CI workflow added; existing dependency graph retained. Full local tests and import checks run.
-- [x] **D07 / P2:** Complete API/setup documentation with actual request bodies, responses, errors, role rules, token transport, attachment limits, required environment names, and deployment commands. Preserve existing names/contracts or obtain permission for changes. **Current verification:** README updated with actual endpoints, fields, errors, invitation flow, roles, token transport, limits, startup and test commands.
-- [ ] **O01 / P3:** Consider measured pagination/query optimization, separate operational readiness, structured logging/metrics, and removal of unused imports/placeholder root text if authorized. These are not invented mandatory PRD features.
-
-## Prioritized remaining work
-
-1. [ ] **P0 — T03/D04/P01/P02:** Configure an isolated replica set and run the integration suite; inspect existing membership duplicates, indexes, transaction retries and data integrity before deployment. Never substitute the application/production database.
-2. [ ] **P0/P2 — P08/P10:** Verify shared gateway rate controls, reset timing/failure enumeration, HTTPS/browser cookie behavior and proxy origin handling.
-3. [ ] **P1/P2 — P09/P12/D05:** Verify SMTP acceptance/delivery, invitation frontend handoff, persistent/shared upload storage, deletion worker recovery and orphan-file reconciliation.
-4. [ ] **P2 — D06:** Dependency advisory/license review and CI gates.
-5. [ ] **P3 — O01/P11:** Measure pagination/query needs; settle email case and name uniqueness policy only if changing current compatibility.
-
-### Full implementation checks actually executed
-
-- Baseline npm test: 24 passed after the sandbox blocked worker spawn with EPERM and the approved external-sandbox rerun completed.
-- Expanded npm test: 44 passed; subsequent security/integrity additions: **50 passed, 0 failed, 1 skipped**.
-- PRD contract test parses the unchanged PRD.md and verifies all 33 methods/paths against mounted Express routers; the invitation route and both legacy aliases are additionally checked.
-- Real loopback HTTP, Mongoose casting/population/save hooks, JWT, bcrypt, validation, Multer and local disk I/O execute. Collections/SMTP and transaction scheduling/rollback are mocked.
-- Final 2026-10-18 checks: npm test completed with 50 passed, 0 failed, 1 skipped; app-only dynamic import passed; node --check passed for all 39 JavaScript files; git diff --check passed after normalizing .gitignore line endings. Documentation counts/fences and unchanged PRD/lockfile hashes were verified. No local secret-value matches were found in source/tests/docs. Complete final file inventory is in history.md.
-- MongoDB integration is skipped because MONGO_TEST_URI is absent, as confirmed by the user. No live SMTP, migrations, deployment, install or Git history mutation occurred.
-
-## Checks actually executed during the original read-only audit
-
-| Check | Actual result | Scope / limitation |
+| ID | State / classification | Remaining acceptance criteria |
 | --- | --- | --- |
-| Git status before audit; baseline commit lookup | Clean master tracking origin/master; baseline recorded above | No commits, staging, reset, checkout, or network fetch |
-| Repository/hidden-file inventory and complete source/document inspection | 25 source JS files; no task/note routers or automated suite | Excluded dependency/Git internals from full-source audit |
-| Node/npm versions | Node v24.14.0; npm 11.9.0 | Local environment only |
-| node --check for each source JS file | All 25 exited successfully | Parsing only; does not resolve named imports |
-| Existing node test-eval.js | **Failed, exit 1:** nonexistent pipeline export (B01) | Only imports app; no server listen, DB connection, or email |
-| Isolated task controller import | **Failed:** nonexistent named User export (B17) | Task controller not mounted by app; separate probe |
-| Relative import target existence | All 48 relative import references resolve to existing files | Export correctness is separate, and fails above |
-| Production root entry existence | index.js absent | npm start/dev deliberately not run |
-| In-memory validator/route inspection | Confirmed validation bypass (3 registration errors still advance), password-change factory does not call next, one-character reset password accepted | No HTTP server or writes; an additional isolated email-validation probe also confirmed bypass |
-| In-memory Mongoose model inspection | User ref populate raises MissingSchemaError; incoming mimetype discarded; membership declared indexes [] | DB connection readyState stayed 0; no database queries executed |
-| Package/lock metadata inspection | Root dependency maps agree; 198 dependency entries all have integrity and npm-registry resolution; installed direct versions match inspected lock versions | No install, lifecycle scripts, dependency advisory scan, or network access |
-| Final documentation and scope verification | 64 unique PRD rows; 27 confirmed bugs, 12 potential issues, six feature-gap groups; all 41 pre-existing file hashes unchanged | Only task.md/history.md added; tracked/staged diffs empty; no application fix or runtime integration result claimed |
+| P01 | [ ] Potential integrity/operations risk. Real transaction rollback, cascade failure/retry, duplicate membership/invitation/refresh races and project-delete/create race pass. | Exercise transient-error retries, uncertain commits, sustained contention and failover; prove no orphan records or incorrect file deletion under recovery. |
+| P02 | [ ] Deployment limitation. Membership unique index is declared and I produces exactly one duplicate-key loser. | Inspect authorized target deployment for duplicates and actual indexes before rollout; plan any cleanup explicitly. Do not infer production data from pcb_test. |
+| P03 | [x] Last-Admin policy and assignment clearing implemented; P concurrent demotion/removal and I sole-Admin denial pass. | Covered policy retained; wider contention belongs to P01. |
+| P04 | [x] Invitation policy settled; I verifies existing/new recipients, expiry/rotation/single consumption and exact email binding. | Client route selected; actual browser handoff remains P10. |
+| P05 | [x] Roles are per-project; verified users can create projects and become Admin. | Preserve this explicit decision; no global Admin override. |
+| P06 | [x] Account actions remain available before email verification; project/task/subtask/note access requires verification. | A/P gate checks pass. |
+| P07 | [x] Original read/replace refresh and token-consumption races were repaired; A/I replay/version, real auth lifecycle and refresh race pass. | Actual SMTP remains T02; broader contention/recovery remains P01. |
+| P08 | [ ] Potential security risk. Bounded per-process IP/account limiter exists; normal forgot response is uniform, but SMTP failure/timing and registration can distinguish accounts. Proxy trust/shared enforcement are unverified. | Decide enumeration policy, test timing/failure paths and shared/proxy rate limits, including expensive password/token operations. |
+| P09 | [ ] Potential storage risk. P/I now verify real DB + disk signatures/metadata/download/cascades/rollback and owned-file cleanup. | Verify persistent/shared storage, crash-orphan/uncertain-commit reconciliation, failed-unlink recovery and bounded queue progress without deleting referenced/legacy files. |
+| P10 | [ ] Browser/deployment verification. Local origin and landing routes chosen; real HTTP preflight/cookie/CORS/denied-Origin behavior passes. | Actual browser credential/refresh/link flow, pre-login/missing-Origin CSRF policy and HTTPS/proxy behavior must pass before browser/deployment sign-off. |
+| P11 | [ ] Optional scaling/product work. Lists/cascades are unpaginated; project names globally unique and account-email matching case-sensitive. | Measure workloads/query plans; change pagination, uniqueness or case policy only through an explicit compatible API/data decision. |
+| P12 | [ ] Environment/deployment limitation. E01/local entrypoint/index startup now pass; health remains liveness only. | Verify actual SMTP sender/TLS/inbox with send authorization; deployment listen/shutdown/recovery and operational monitoring remain. |
 
-### Deliberately not executed during the original read-only audit
+## PRD feature groups and remaining tests/deployment
 
-- npm start/dev or importing src/index.js: starts/connects the application and database.
-- HTTP integration, database reads/writes, index creation, migrations, file uploads, real token generation against configured secrets, SMTP sends, external services, dependency install/update/audit, formatting, coverage, builds, or CI.
-- Password/token race, upload attack, load, and deployment checks requiring an isolated authorized environment.
+| ID | State | Evidence / acceptance criteria |
+| --- | --- | --- |
+| M01 | [x] Task API present | Five routes; P CRUD/roles/parents/status/assignment and I selected writes. |
+| M02 | [x] Subtask API present | Three routes; P all-role completion versus privileged title/create/delete, I completion. |
+| M03 | [x] Notes API present | Five routes; P/I full scoped CRUD/roles/population and persistence. |
+| M04 | [x] Attachments present | P multiple files/metadata/retrieval/append/delete; no new removal endpoint invented. Operations remain P09/T03. |
+| M05 | [x] Validation/error completion | B31/B32 parser/scheme regressions pass without weakening sanitization or authentication; browser portion remains T06. |
+| M06 | [x] Core collaboration policy settled | Preserve P04/P05/P06 decisions. |
+| T01 | [x] Focused historical bug regressions | A/P/C/S passed; do not equate mocks to live isolation. |
+| T02 | [ ] Real auth/mail lifecycle: DB portion complete | I passed register/verify/resend/login/refresh/logout/reset/change/expiry/replay. Remaining: explicitly authorized real SMTP sender/TLS/inbox verification; no mock acceptance claim substitutes for delivery. |
+| T03 | [ ] Real collaboration lifecycle: core gate complete | I passed existing/new invitations, all roles, two-project denials, task/subtask/note CRUD, real DB + disk uploads/cleanup and injected cascade rollback. Remaining: broader transient/uncertain-commit/failover recovery and queue persistence scenarios in P01/P09. |
+| T04 | [x] Role and parent regressions | C registers all 33; P verifies applicable roles, outsiders, unverified users, parent substitution and removed members. |
+| T05 | [x] Mocked and real persistence + file workflows | P/I cover metadata, downloads, append, task/project deletion, rollback retaining referenced files and owned-file cleanup. Production crash/storage recovery remains P09. |
+| T06 | [ ] HTTP error contracts complete; browser checks open | B31/B32 regressions pass. Complete actual browser/HTTPS/proxy checks in P10 without CORS or cookie workarounds. |
+| D01 | [x] Entry/import repair present | Actual configuration/import and normal src/index.js startup through the verified local launcher pass; no non-local application URI contacted. |
+| D02 | [x] Runtime documented | Tested Node 24.14.0/npm 11.9.0; installed dependency minimum Node 20.19.0, no install/update. |
+| D03 | [x] Actual local configuration ready | validateEnvironment on the edited .env passes; secrets generated independently, selected client URLs set, original DB URIs preserved and local startup verified. Production configuration remains separate. |
+| D04 | [ ] Deployment DB verification | Local 8.0.34 rs0 PRIMARY and fixture indexes/transactions pass; authorized deployment duplicate/index checks, backups/restore and failover remain. |
+| D05 | [ ] Operational readiness | Local app startup/index initialization/health and stopped listener verified. Target deployment listen failures, graceful deadlines, proxy/HTTPS, persistent file permissions and cleanup-worker recovery remain. |
+| D06 | [ ] Supply-chain/CI review | With authorization, run dependency advisory/license review and add CI gates for syntax, mocks and guarded integration. Existing lock integrity is not a vulnerability scan. |
+| D07 | [ ] Documentation discoverability | docs/frontend-integration.md is the current API/setup entrypoint; history/task and implementation-decisions MongoDB status updated. Preserve staged README deletion; decide future root entrypoint and reconcile remaining historical requiredThings.md claims. |
+| O01 | [ ] Optional improvements | Measure need for pagination, readiness/metrics, structured logs and root placeholder cleanup; no unsolicited API expansion. |
 
-Static and in-memory findings do not prove database state, successful delivery, browser behavior, production exploitability, or end-to-end correctness. Keep these limitations with any future status report.
+## Local MongoDB and test readiness
 
+Existing Community **8.0.34**, PID **12456** at verification, single-member **rs0 PRIMARY**, config version 1, only **127.0.0.1:27018**. No download/install/reset/reconfiguration or MongoDB start/stop was needed. Paths and narrow ignore rules remain as documented in history.md and docs/windows-mongodb.md.
+
+Integration reads only guarded MONGODB_TEST_URI, refuses existing application collections, verifies actual local topology/paths before writes/index creation, then drops only its owned collections. No whole-database deletion. Multer filename capture identifies exactly the fixture's temporary files; finally cleanup never sweeps unrelated uploads. After each executed fixture, pcb_test had zero collections, public/images only gitkeep, and no integration lock remained.
+
+Interactive startup now has a separate **pcb_development** database. It did not exist before this task. The local launcher initialized eight application collections/indexes; record counts remained zero. These persistent development collections were retained. Automated fixture writes never used this DB. Original .env MONGO_URI (non-local) and MONGODB_TEST_URI values are unchanged; no Atlas connection occurred.
+
+## Commands and actual outcomes
+
+| Command / invocation | Final result and limitation |
+| --- | --- |
+| `npm.cmd test` | **57 passed / 0 failed / 0 skipped**, 2 suites, about 5.72 s. Includes every prior passing regression and all 33 route contracts. |
+| `npm.cmd run test:integration` | **6 passed / 0 failed / 0 skipped**, about 4.20 s: one parent fixture + five lifecycle subtests. Passed twice, including rerun after final source changes. |
+| `$files = @(rg --files src tests scripts -g '*.js'); foreach ($file in $files) { node --check $file }` | **44 files passed**, including all 34 application files. |
+| PowerShell Parser.ParseFile on scripts/mongodb.ps1 | Passed. Existing script unchanged. |
+| `node scripts/dev-local.js --check` | Actual local configuration and project rs0 PRIMARY passed; no app startup or model writes in --check. |
+| `npm.cmd run dev:local` | Normal src/index.js startup, local DB/index initialization and HTTP listen passed. Health 200, unauthenticated current-user 401, malformed JSON 400 and credentialed local CORS verified. Ctrl+C stopped the API; npm's interrupted batch wrapper exited 1, with no startup error. Listener removal confirmed. |
+| `validateEnvironment(dotenv.parse(fs.readFileSync(".env")))` in Node module stdin | Passed; no values printed. Validator unchanged. |
+| App import after loading actual .env into that process; assert mongoose.connection.readyState === 0 | Passed; no listener/DB connection from import. |
+| `node scripts/mongodb-admin.js status` | Existing local version/paths/PID/PRIMARY verified. |
+| Read-only local collection/file/lock inspection | pcb_test zero collections; pcb_development eight collections with zero records; public/images only gitkeep; no test lock. |
+| `git diff --check`; `git diff --cached --check` | Passed on final edits. No lint/build scripts; no dependencies installed, upgraded or removed. |
+
+Initial sandbox attempts to run each suite failed worker creation with EPERM. Approved reruns executed the actual tests; final counts above are their results. No application-test failure was hidden or counted as a pass. The intentional cascade fault is an asserted 500 with real rollback, not an unhandled test failure.
+
+No production/Atlas connection or real SMTP occurred. All integration emails used in-memory capture and installed MailComposer envelope normalization. Full browser, live SMTP, production topology/data/index review, backups/restore, failover and crash/shared-storage behavior remain unverified.
+
+## Current task changes and preservation
+
+Changed by this implementation: ignored **.env**; **src/app.js**, **src/middlewares/auth.middleware.js**, **src/utils/mail.utils.js**; **tests/auth.test.js**, **tests/integration.test.js**; **package.json** (added dev:local only); **docs/windows-mongodb.md**, **docs/implementation-decisions.md**, **history.md**, **task.md**.
+
+Created: **scripts/dev-local.js**, **tests/helpers/integration-lifecycle.js**, **docs/frontend-integration.md**. No dependencies, controllers, routes, models, schema fields or API names were changed. Existing MongoDB scripts/install/configuration and the pre-existing test URI guard were preserved. Original .env values outside the six explicitly changed/added local keys were checked unchanged; .env stays ignored and generated secrets are absent from tracked/source/documentation files.
+
+Pre-existing changes retained: unstaged .gitignore/history.md/package.json/task.md/tests/integration.test.js; staged README.md deletion; untracked docs/windows-mongodb.md, scripts/mongodb.ps1, scripts/mongodb-admin.js, scripts/lib/mongodb-test.js, tests/mongodb-safety.test.js. Nothing staged, committed, reset, cleaned or discarded. Final hashes against the implementation's 63-file baseline confirmed exactly 11 intended modified files and three additions, with no removals. PRD.md/package-lock.json and MongoDB runtime control files remain unchanged.
+
+Future work must preserve this history, nomenclature and user-selected local URLs. Use the guarded pcb_test fixture for automated DB changes, the explicit dev:local launcher for development, and never fall back to Atlas. Broader production and external-email tasks require the applicable authorization; actual browser sign-off is the next integration milestone.

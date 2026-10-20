@@ -5,6 +5,9 @@ import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import mongoose from "mongoose";
 import nodemailer from "nodemailer";
+import MailComposer from "nodemailer/lib/mail-composer/index.js";
+import { gzipSync, deflateSync, brotliCompressSync } from "node:zlib";
+import { sendingEmail } from "../src/utils/mail.utils.js";
 import User from "../src/models/user.models.js";
 import { Project } from "../src/models/project.models.js";
 import { ProjectMember } from "../src/models/projectmember.models.js";
@@ -19,6 +22,7 @@ let membershipCalls = 0;
 let membershipRole = null;
 let mailFails = false;
 let mailRejected = false;
+let acceptedRecipients;
 let databaseFails = false;
 let beforeUserUpdate = null;
 let server;
@@ -109,7 +113,7 @@ describe("authentication HTTP regressions (database and SMTP mocked)", { concurr
         });
         mock.method(User.collection, "findOne", async (filter, options) => {
             dbCalls++;
-            if (databaseFails) throw new Error("Internal database detail must not escape");
+            if (databaseFails) throw databaseFails instanceof Error ? databaseFails : new Error("Internal database detail must not escape");
             return project(findStored(filter), options);
         });
         mock.method(User.collection, "findOneAndUpdate", async (filter, update, options) => {
@@ -137,7 +141,8 @@ describe("authentication HTTP regressions (database and SMTP mocked)", { concurr
             sendMail: async (mail) => {
                 if (mailFails) throw new Error("SMTP credential details must not escape");
                 sentMail.push(mail);
-                return { accepted: mailRejected ? [] : [mail.to], rejected: mailRejected ? [mail.to] : [] };
+                const envelope = new MailComposer(mail).compile().getEnvelope();
+                return { accepted: mailRejected ? [] : acceptedRecipients ?? envelope.to, rejected: mailRejected ? envelope.to : [] };
             },
         }));
         const { default: app } = await import("../src/app.js");
@@ -154,6 +159,7 @@ describe("authentication HTTP regressions (database and SMTP mocked)", { concurr
         membershipRole = null;
         mailFails = false;
         mailRejected = false;
+        acceptedRecipients = undefined;
         databaseFails = false;
         beforeUserUpdate = null;
         process.env.NODE_ENV = "test";
@@ -489,6 +495,80 @@ describe("authentication HTTP regressions (database and SMTP mocked)", { concurr
         } finally {
             process.env.SERVER_URL = original;
         }
+    });
+
+    it("accepts case-insensitive Bearer schemes and preserves cookie precedence", async () => {
+        const { accessToken } = await session();
+        for (const scheme of ["Bearer", "bearer", "BEARER", "bEaReR  "]) {
+            assert.equal((await auth("/current-user", { method: "GET", headers: { Authorization: `${scheme} ${accessToken}` } })).status, 200);
+        }
+        for (const value of ["", "Bearer", "Bearer ", accessToken, `Basic ${accessToken}`, `xBearer ${accessToken}`,
+            `Bearer\t${accessToken}`, `Bearer ${accessToken} extra`, `Bearer ${accessToken},${accessToken}`, "Bearer invalid"]) {
+            assert.equal((await auth("/current-user", { method: "GET", headers: { Authorization: value } })).status, 401);
+        }
+        assert.equal((await auth("/current-user", { method: "GET", cookie: `accessToken=${accessToken}`, headers: { Authorization: "invalid" } })).status, 200);
+        assert.equal((await auth("/current-user", { method: "GET", cookie: "accessToken=invalid", token: accessToken })).status, 401);
+        assert.equal((await auth("/current-user", { method: "GET", cookie: "accessToken=", token: accessToken })).status, 200);
+    });
+
+    it("classifies actual parser/decompression errors and exposes CORS without leaking internals", async () => {
+        const json = JSON.stringify({ email: credentials.email, password: credentials.password });
+        const cases = [
+            ["{", {}, 400],
+            [json, { "Content-Encoding": "unsupported" }, 415],
+            [json, { "Content-Type": "application/json; charset=iso-8859-1" }, 415],
+            [Buffer.from("not gzip"), { "Content-Encoding": "gzip" }, 400],
+            [gzipSync(json).subarray(0, 12), { "Content-Encoding": "gzip" }, 400],
+            [Buffer.from("not deflate"), { "Content-Encoding": "deflate" }, 400],
+            [Buffer.from("not brotli"), { "Content-Encoding": "br" }, 400],
+            [Buffer.from([1]), { "Content-Encoding": "br" }, 400],
+            [JSON.stringify({ value: "x".repeat(17000) }), {}, 413],
+            [gzipSync(JSON.stringify({ value: "x".repeat(17000) })), { "Content-Encoding": "gzip" }, 413],
+        ];
+        for (const [body, headers, status] of cases) {
+            const response = await fetch(baseUrl + "/api/v1/auth/login", { method: "POST", body,
+                headers: { "Content-Type": "application/json", Origin: "https://client.example.test", ...headers } });
+            assert.equal(response.status, status);
+            assert.equal(response.headers.get("access-control-allow-origin"), "https://client.example.test");
+            const error = await response.json();
+            assert.equal(error.statusCode, status);
+            assert.equal(error.data, null);
+            assert.equal(error.success, false);
+            assert.deepEqual(error.errors, []);
+            assert.equal(error.stack, undefined);
+        }
+        assert.equal(dbCalls, 0);
+        // A similarly named internal error must NOT be treated as a parser error.
+        databaseFails = Object.assign(new Error("private database failure"), { code: "Z_DATA_ERROR", status: 400 });
+        for (const [body, encoding] of [[gzipSync(json), "gzip"], [deflateSync(json), "deflate"], [brotliCompressSync(json), "br"]]) {
+            const response = await fetch(baseUrl + "/api/v1/auth/login", { method: "POST", body,
+                headers: { "Content-Type": "application/json", "Content-Encoding": encoding } });
+            assert.equal(response.status, 500);
+            assert.equal((await response.json()).message, "Internal server error");
+        }
+    });
+
+    it("accepts normalized SMTP recipients for ordinary and internationalized account flows", async () => {
+        for (const [index, email] of ["ordinary@example.test", "ascii@bücher.test", "δοκιμή@bücher.test", '"quoted"@bücher.test', '"a b"@bücher.test'].entries()) {
+            const created = await registration({ email, username: `recipient${index}` });
+            assert.equal(created.status, 201);
+            const loggedIn = await auth("/login", { body: { email, password: credentials.password } });
+            assert.equal(loggedIn.status, 200);
+            assert.equal((await auth("/resend-email-verification", { token: loggedIn.body.data.accessToken })).status, 200);
+            assert.equal((await auth("/forgot-password", { body: { email } })).status, 200);
+        }
+    });
+
+    it("accepts equivalent recipient domains but rejects different mailboxes or genuine rejection", async () => {
+        const options = { email: "Case@bücher.test", subject: "Fixture", mailgenContent: { body: { intro: "Fixture" } } };
+        acceptedRecipients = [{ address: "Case@XN--BCHER-KVA.TEST" }];
+        await sendingEmail(options);
+        for (const accepted of [[], ["case@xn--bcher-kva.test"], ["different@xn--bcher-kva.test"], [null], ["invalid"]]) {
+            acceptedRecipients = accepted;
+            await assert.rejects(sendingEmail(options), error => error.statusCode === 502);
+        }
+        mailFails = true;
+        await assert.rejects(sendingEmail(options), error => error.statusCode === 502 && !error.message.includes("credential"));
     });
 
     it("applies throttling through the mounted auth router before database operations", async () => {

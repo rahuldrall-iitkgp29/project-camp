@@ -5,12 +5,19 @@ import cookieParser from "cookie-parser";
 import { ApiError } from "./utils/apiError.js";
 import { fileURLToPath } from "node:url";
 import { cleanupUploads } from "./utils/attachment.utils.js";
+import { constants as zlibConstants } from "node:zlib";
 
 const app = express();
 
-// basic configurations
-app.use(express.json({ limit: "16kb" }));
-app.use(express.urlencoded({ extended: true, limit: "16kb" }));
+// Keep parser provenance so a database/internal zlib error cannot become a 400.
+const requestParsingErrors = new WeakSet();
+const brotliFormatErrors = new Set(Object.entries(zlibConstants)
+  .filter(([name]) => name.startsWith("BROTLI_DECODER_ERROR_FORMAT_"))
+  .map(([, value]) => value));
+const parseBody = parser => (req, res, next) => parser(req, res, error => {
+  if (error) requestParsingErrors.add(error);
+  next(error);
+});
 
 app.use(cookieParser());// now we have access to cookies in our request object and we can set cookies in our response object
 
@@ -34,6 +41,10 @@ app.use(
     allowedHeaders: ["Authorization", "Content-Type"],
   }),
 );
+
+// CORS must also be present on parser-error responses to the approved client.
+app.use(parseBody(express.json({ limit: "16kb" })));
+app.use(parseBody(express.urlencoded({ extended: true, limit: "16kb" })));
 
 app.use(express.static(fileURLToPath(new URL("../public/", import.meta.url)), {
   dotfiles: "deny",
@@ -99,6 +110,15 @@ app.use(async (err, req, res, next) => {
   } else if (err.type === "entity.too.large") {
     statusCode = 413;
     message = "Request body is too large";
+  } else if (requestParsingErrors.has(err) && ["charset.unsupported", "encoding.unsupported"].includes(err.type)) {
+    statusCode = 415;
+    message = "Unsupported request charset or content encoding";
+  } else if (requestParsingErrors.has(err) && err.status === 400 &&
+      (["Z_DATA_ERROR", "Z_BUF_ERROR"].includes(err.code) ||
+       (req.get("Content-Encoding")?.toLowerCase() === "br" && brotliFormatErrors.has(err.errno)) ||
+       ["request.aborted", "request.size.invalid"].includes(err.type))) {
+    statusCode = 400;
+    message = "Invalid or incomplete request body";
   }
 
   return res.status(statusCode).json({

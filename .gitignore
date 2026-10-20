@@ -7,3 +7,9 @@ defination.txt
 test-eval.js
 public/images/*
 !public/images/gitkeep
+
+# Project-local MongoDB binaries and runtime files only
+/tools/mongodb/
+/.local/mongodb-data/
+/.local/mongodb-logs/
+/.local/mongodb-runtime/

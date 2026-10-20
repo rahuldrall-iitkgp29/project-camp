@@ -10,7 +10,11 @@ import jwt from "jsonwebtoken"
 import mongoose from "mongoose"
 
 export const verifyJWT = asyncHandler(async(req,res,next)=>{
-    const token = req.cookies?.accessToken || req.header("Authorization")?.replace("Bearer ","")  ;
+    const authorization = req.header("Authorization");
+    const bearerToken = typeof authorization === "string"
+        ? /^Bearer +([^\s,]+)$/i.exec(authorization)?.[1]
+        : undefined;
+    const token = req.cookies?.accessToken || bearerToken;
     //if i got cokkie then access access token from it or from bearer tokens and replace it from bearer to nothing and then give it back
 
 

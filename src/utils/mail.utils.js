@@ -1,6 +1,21 @@
 import Mailgen from "mailgen";
 import nodemailer from "nodemailer"
 import { ApiError } from "./apiError.js";
+import { domainToASCII } from "node:url";
+
+// SMTP domains are case-insensitive IDNA names; local parts retain their case.
+// Do not change persisted account-email matching or normalize distinct mailboxes.
+const recipientIdentity = recipient => {
+  const address = typeof recipient === "string" ? recipient : recipient?.address;
+  if (typeof address !== "string") return null;
+  const at = address.lastIndexOf("@");
+  if (at < 1) return null;
+  let local = address.slice(0, at);
+  // Nodemailer removes optional local-part quotes and quoted-pair escapes.
+  if (local.startsWith('"') && local.endsWith('"')) local = local.slice(1, -1).replace(/\\(.)/g, "$1");
+  const domain = domainToASCII(address.slice(at + 1));
+  return domain ? `${local}@${domain.toLowerCase()}` : null;
+};
 
 const sendingEmail = async (options) => {//options -> obejct
   const mailGenerator = new Mailgen({ // config our email themes and all
@@ -38,7 +53,8 @@ const sendingEmail = async (options) => {//options -> obejct
 
   try{
     const result = await transporter.sendMail(mail);
-    if (!result.accepted?.some(recipient => (typeof recipient === "string" ? recipient : recipient.address) === options.email)) {
+    const intendedRecipient = recipientIdentity(options.email);
+    if (!intendedRecipient || !result.accepted?.some(recipient => recipientIdentity(recipient) === intendedRecipient)) {
       throw new Error("Recipient was not accepted");
     }
   }catch(error){
