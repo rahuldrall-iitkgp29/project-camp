@@ -106,7 +106,8 @@ export const TaskBoard = ({ projectId, members = [], userRole = "member" }) => {
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter tasks by title or assignee..."
+            placeholder="Search tasks or assignees"
+            aria-label="Search tasks or assignees"
             style={{ paddingLeft: "36px", fontSize: "0.85rem" }}
           />
           <Search
@@ -148,7 +149,7 @@ export const TaskBoard = ({ projectId, members = [], userRole = "member" }) => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(290px, 1fr))",
+            gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 290px), 1fr))",
             gap: "20px",
             alignItems: "start",
           }}
@@ -157,7 +158,7 @@ export const TaskBoard = ({ projectId, members = [], userRole = "member" }) => {
             <div
               key={col.id}
               style={{
-                backgroundColor: "rgba(16, 21, 34, 0.4)",
+                backgroundColor: "var(--bg-tertiary)",
                 border: "1px solid var(--border-subtle)",
                 borderRadius: "var(--radius-lg)",
                 padding: "16px",
@@ -183,7 +184,7 @@ export const TaskBoard = ({ projectId, members = [], userRole = "member" }) => {
                   {col.icon}
                   <span
                     style={{
-                      fontWeight: 700,
+                      fontWeight: 600,
                       fontSize: "0.95rem",
                       color: "var(--text-primary)",
                     }}

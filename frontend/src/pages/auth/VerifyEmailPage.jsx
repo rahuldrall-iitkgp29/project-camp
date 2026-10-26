@@ -61,7 +61,7 @@ export const VerifyEmailPage = () => {
                 width: "60px",
                 height: "60px",
                 borderRadius: "50%",
-                backgroundColor: "rgba(16, 185, 129, 0.15)",
+                backgroundColor: "var(--success-bg)",
                 color: "var(--success)",
                 display: "flex",
                 alignItems: "center",
@@ -102,8 +102,8 @@ export const VerifyEmailPage = () => {
                 borderRadius: "50%",
                 backgroundColor:
                   status === "error"
-                    ? "rgba(239, 68, 68, 0.15)"
-                    : "rgba(99, 102, 241, 0.15)",
+                    ? "var(--danger-bg)"
+                    : "var(--primary-soft)",
                 color:
                   status === "error" ? "var(--danger)" : "var(--primary-light)",
                 display: "flex",

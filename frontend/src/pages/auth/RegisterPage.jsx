@@ -60,7 +60,7 @@ export const RegisterPage = () => {
               width: "56px",
               height: "56px",
               borderRadius: "50%",
-              backgroundColor: "rgba(16, 185, 129, 0.15)",
+              backgroundColor: "var(--success-bg)",
               color: "var(--success)",
               display: "flex",
               alignItems: "center",
@@ -119,15 +119,15 @@ export const RegisterPage = () => {
               width: "48px",
               height: "48px",
               borderRadius: "var(--radius-md)",
-              background: "var(--primary-gradient)",
+              background: "var(--primary-soft)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               margin: "0 auto 16px",
-              boxShadow: "0 4px 16px var(--primary-glow)",
+              color: "var(--primary)",
             }}
           >
-            <UserPlus size={24} color="white" />
+            <UserPlus size={24} color="var(--primary)" />
           </div>
           <h2 style={{ fontSize: "1.6rem" }}>Create Account</h2>
           <p

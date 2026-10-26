@@ -8,15 +8,23 @@ export const TaskCard = ({ task, onClick }) => {
   const completedSubtasks = subtasks.filter((st) => st.isCompleted).length;
 
   const statusBorderColors = {
-    todo: "rgba(14, 165, 233, 0.4)",
-    in_progress: "rgba(245, 158, 11, 0.4)",
-    done: "rgba(16, 185, 129, 0.4)",
+    todo: "var(--info-border)",
+    in_progress: "var(--warning-border)",
+    done: "var(--success-border)",
   };
 
   return (
     <div
       onClick={onClick}
-      className="glass-panel"
+      className="glass-panel interactive-card"
+      role="button"
+      tabIndex={0}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick();
+        }
+      }}
       style={{
         padding: "16px",
         cursor: "pointer",
@@ -24,15 +32,6 @@ export const TaskCard = ({ task, onClick }) => {
         flexDirection: "column",
         gap: "12px",
         borderLeft: `3px solid ${statusBorderColors[task.status] || "var(--primary)"}`,
-        backgroundColor: "var(--bg-tertiary)",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-2px)";
-        e.currentTarget.style.backgroundColor = "var(--bg-card-hover)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "none";
-        e.currentTarget.style.backgroundColor = "var(--bg-tertiary)";
       }}
     >
       {/* Title */}

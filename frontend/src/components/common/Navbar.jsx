@@ -1,42 +1,22 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Layers,
   LogOut,
   KeyRound,
   AlertTriangle,
-  CheckCircle,
-  Activity,
   User,
 } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
-import { healthApi } from "../../api/health.api.js";
 import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
 
 export const Navbar = () => {
   const { user, isEmailVerified, logout, resendVerification } = useAuth();
-  const [isHealthOnline, setIsHealthOnline] = useState(null);
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [isUserMenuOpen, setIsUserMenuOpen] = useState(false);
   const [resending, setResending] = useState(false);
 
   const navigate = useNavigate();
-
-  // Check health on mount
-  useEffect(() => {
-    let isMounted = true;
-    healthApi
-      .check()
-      .then(() => {
-        if (isMounted) setIsHealthOnline(true);
-      })
-      .catch(() => {
-        if (isMounted) setIsHealthOnline(false);
-      });
-    return () => {
-      isMounted = false;
-    };
-  }, []);
 
   const handleLogout = async () => {
     await logout();
@@ -55,16 +35,13 @@ export const Navbar = () => {
   return (
     <>
       <header
+        className="app-navbar"
         style={{
           position: "sticky",
           top: 0,
           zIndex: 50,
-          backgroundColor: "rgba(10, 13, 20, 0.8)",
-          backdropFilter: "blur(16px)",
-          WebkitBackdropFilter: "blur(16px)",
+          backgroundColor: "var(--bg-secondary)",
           borderBottom: "1px solid var(--border-subtle)",
-          padding: "0 1.5rem",
-          height: "64px",
           display: "flex",
           alignItems: "center",
           justifyContent: "space-between",
@@ -79,74 +56,31 @@ export const Navbar = () => {
               alignItems: "center",
               gap: "10px",
               color: "var(--text-primary)",
-              fontWeight: 800,
-              fontSize: "1.2rem",
+              fontWeight: 600,
+              fontSize: "1.1rem",
               letterSpacing: "-0.02em",
             }}
           >
             <div
               style={{
-                width: "36px",
-                height: "36px",
+                width: "32px",
+                height: "32px",
                 borderRadius: "var(--radius-md)",
-                background: "var(--primary-gradient)",
+                background: "var(--bg-tertiary)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                boxShadow: "0 2px 10px var(--primary-glow)",
               }}
             >
-              <Layers size={20} color="white" />
+              <Layers size={20} color="var(--primary)" />
             </div>
             <span>Project Camp</span>
           </Link>
 
-          {/* Health status badge */}
-          <div
-            title={
-              isHealthOnline
-                ? "API is connected and healthy"
-                : "API status: checking / unreachable"
-            }
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "6px",
-              padding: "3px 8px",
-              borderRadius: "var(--radius-full)",
-              backgroundColor: "rgba(255, 255, 255, 0.04)",
-              border: "1px solid var(--border-subtle)",
-              fontSize: "0.75rem",
-              color: "var(--text-muted)",
-            }}
-          >
-            <span
-              style={{
-                width: "7px",
-                height: "7px",
-                borderRadius: "50%",
-                backgroundColor:
-                  isHealthOnline === true
-                    ? "var(--success)"
-                    : isHealthOnline === false
-                      ? "var(--danger)"
-                      : "var(--warning)",
-                boxShadow:
-                  isHealthOnline === true ? "0 0 8px var(--success)" : "none",
-              }}
-            />
-            <span>
-              {isHealthOnline
-                ? "API Online"
-                : isHealthOnline === false
-                  ? "API Offline"
-                  : "Connecting..."}
-            </span>
-          </div>
         </div>
 
         {/* Right: User State / Navigation */}
-        <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+        <div className="navbar-actions">
           {user ? (
             <>
               {/* Email verification reminder if unverified */}
@@ -173,7 +107,7 @@ export const Navbar = () => {
                     style={{
                       background: "none",
                       border: "none",
-                      color: "#fbbf24",
+                      color: "var(--warning)",
                       textDecoration: "underline",
                       cursor: "pointer",
                       fontSize: "0.8rem",
@@ -197,7 +131,7 @@ export const Navbar = () => {
                     padding: "5px 12px 5px 6px",
                     backgroundColor: "var(--bg-tertiary)",
                     border: "1px solid var(--border-medium)",
-                    borderRadius: "var(--radius-full)",
+                    borderRadius: "var(--radius-md)",
                     cursor: "pointer",
                   }}
                   aria-expanded={isUserMenuOpen}
@@ -233,7 +167,7 @@ export const Navbar = () => {
                       right: 0,
                       top: "calc(100% + 8px)",
                       width: "220px",
-                      backgroundColor: "#131929",
+                      backgroundColor: "var(--bg-card)",
                       border: "1px solid var(--border-medium)",
                       borderRadius: "var(--radius-md)",
                       boxShadow: "var(--shadow-lg)",
@@ -288,7 +222,7 @@ export const Navbar = () => {
                       }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.backgroundColor =
-                          "rgba(255, 255, 255, 0.05)")
+                          "var(--bg-tertiary)")
                       }
                       onMouseLeave={(e) =>
                         (e.currentTarget.style.backgroundColor = "transparent")
@@ -318,7 +252,7 @@ export const Navbar = () => {
                       }}
                       onMouseEnter={(e) =>
                         (e.currentTarget.style.backgroundColor =
-                          "rgba(239, 68, 68, 0.08)")
+                          "var(--danger-bg)")
                       }
                       onMouseLeave={(e) =>
                         (e.currentTarget.style.backgroundColor = "transparent")
@@ -337,7 +271,7 @@ export const Navbar = () => {
                 Log In
               </Link>
               <Link to="/register" className="btn btn-primary btn-sm">
-                Get Started
+                Sign Up
               </Link>
             </div>
           )}

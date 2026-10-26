@@ -38,15 +38,15 @@ export const LoginPage = () => {
               width: "48px",
               height: "48px",
               borderRadius: "var(--radius-md)",
-              background: "var(--primary-gradient)",
+              background: "var(--primary-soft)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               margin: "0 auto 16px",
-              boxShadow: "0 4px 16px var(--primary-glow)",
+              color: "var(--primary)",
             }}
           >
-            <LogIn size={24} color="white" />
+            <LogIn size={24} color="var(--primary)" />
           </div>
           <h2 style={{ fontSize: "1.6rem" }}>Welcome Back</h2>
           <p

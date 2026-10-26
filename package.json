@@ -23,7 +23,9 @@
     "mongodb:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Status",
     "mongodb:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Stop",
     "mongodb:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Smoke",
-    "format": "prettier --write ."
+    "format": "prettier --write .",
+    "dev:verify": "node scripts/verify-user.js",
+    "seed:demo": "node scripts/seed-demo.js"
   },
   "devDependencies": {
     "nodemon": "^3.1.14",
@@ -42,6 +44,7 @@
     "jsonwebtoken": "^9.0.3",
     "mailgen": "^2.0.36",
     "mongoose": "^9.7.3",
+    "mongosh": "^2.14.0",
     "multer": "^2.3.0",
     "nodemailer": "^9.1.1"
   }

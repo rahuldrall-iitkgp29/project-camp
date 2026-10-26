@@ -475,7 +475,7 @@ export const TaskModal = ({
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "8px 12px",
-                      backgroundColor: "rgba(255, 255, 255, 0.03)",
+                      backgroundColor: "var(--bg-primary)",
                       borderRadius: "var(--radius-sm)",
                       border: "1px solid var(--border-subtle)",
                     }}
@@ -607,7 +607,7 @@ export const TaskModal = ({
                         alignItems: "center",
                         justifyContent: "space-between",
                         padding: "8px 12px",
-                        backgroundColor: "rgba(255, 255, 255, 0.03)",
+                        backgroundColor: "var(--bg-primary)",
                         borderRadius: "var(--radius-sm)",
                         border: "1px solid var(--border-subtle)",
                       }}
@@ -688,7 +688,7 @@ export const TaskModal = ({
                       alignItems: "center",
                       justifyContent: "space-between",
                       padding: "6px 10px",
-                      backgroundColor: "rgba(99, 102, 241, 0.1)",
+                      backgroundColor: "var(--primary-soft)",
                       borderRadius: "var(--radius-sm)",
                       border: "1px dashed var(--primary)",
                       fontSize: "0.82rem",
@@ -724,7 +724,7 @@ export const TaskModal = ({
                       border: "1px dashed var(--border-medium)",
                       borderRadius: "var(--radius-md)",
                       cursor: "pointer",
-                      backgroundColor: "rgba(255, 255, 255, 0.02)",
+                      backgroundColor: "var(--bg-primary)",
                       transition: "border-color var(--transition-fast)",
                     }}
                     onMouseEnter={(e) =>

@@ -188,7 +188,7 @@ export const MemberManagement = ({
                   }}
                   onMouseEnter={(e) =>
                     (e.currentTarget.style.backgroundColor =
-                      "rgba(255, 255, 255, 0.02)")
+                      "var(--bg-primary)")
                   }
                   onMouseLeave={(e) =>
                     (e.currentTarget.style.backgroundColor = "transparent")
@@ -231,7 +231,7 @@ export const MemberManagement = ({
                                 color: "var(--primary-light)",
                                 padding: "1px 6px",
                                 borderRadius: "var(--radius-full)",
-                                backgroundColor: "rgba(99, 102, 241, 0.15)",
+                                backgroundColor: "var(--primary-soft)",
                               }}
                             >
                               You

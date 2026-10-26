@@ -18,7 +18,7 @@ export const NotFoundPage = () => {
             width: "64px",
             height: "64px",
             borderRadius: "50%",
-            backgroundColor: "rgba(99, 102, 241, 0.12)",
+            backgroundColor: "var(--bg-tertiary)",
             color: "var(--primary-light)",
             display: "flex",
             alignItems: "center",

@@ -412,7 +412,7 @@ export const ProjectDetailPage = () => {
               style={{
                 padding: "28px",
                 borderColor: "var(--danger-border)",
-                backgroundColor: "rgba(239, 68, 68, 0.04)",
+                backgroundColor: "var(--bg-card)",
               }}
             >
               <h3 style={{ color: "var(--danger)", marginBottom: "6px" }}>

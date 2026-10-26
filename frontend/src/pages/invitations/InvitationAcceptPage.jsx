@@ -56,15 +56,15 @@ export const InvitationAcceptPage = () => {
             width: "60px",
             height: "60px",
             borderRadius: "var(--radius-lg)",
-            background: "var(--primary-gradient)",
+            background: "var(--primary-soft)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
             margin: "0 auto 20px",
-            boxShadow: "0 4px 16px var(--primary-glow)",
+            color: "var(--primary)",
           }}
         >
-          <Users size={30} color="white" />
+          <Users size={30} color="var(--primary)" />
         </div>
 
         <h2 style={{ fontSize: "1.7rem", marginBottom: "10px" }}>
@@ -86,7 +86,7 @@ export const InvitationAcceptPage = () => {
             <div
               style={{
                 padding: "16px",
-                backgroundColor: "rgba(99, 102, 241, 0.08)",
+                backgroundColor: "var(--primary-soft)",
                 borderRadius: "var(--radius-md)",
                 border: "1px solid var(--border-subtle)",
                 marginBottom: "24px",
@@ -148,7 +148,7 @@ export const InvitationAcceptPage = () => {
             <div
               style={{
                 padding: "16px",
-                backgroundColor: "rgba(255, 255, 255, 0.03)",
+                backgroundColor: "var(--bg-primary)",
                 borderRadius: "var(--radius-md)",
                 border: "1px solid var(--border-subtle)",
                 marginBottom: "24px",

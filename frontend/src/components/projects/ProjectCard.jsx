@@ -26,7 +26,7 @@ export const ProjectCard = ({ projectData }) => {
   return (
     <Link
       to={`/projects/${project._id}`}
-      className="glass-panel"
+      className="glass-panel interactive-card"
       style={{
         display: "flex",
         flexDirection: "column",
@@ -37,15 +37,6 @@ export const ProjectCard = ({ projectData }) => {
         position: "relative",
         textDecoration: "none",
         color: "inherit",
-      }}
-      onMouseEnter={(e) => {
-        e.currentTarget.style.transform = "translateY(-3px)";
-        e.currentTarget.style.boxShadow =
-          "var(--shadow-lg), var(--shadow-glow)";
-      }}
-      onMouseLeave={(e) => {
-        e.currentTarget.style.transform = "none";
-        e.currentTarget.style.boxShadow = "var(--shadow-md)";
       }}
     >
       <div>
@@ -85,7 +76,7 @@ export const ProjectCard = ({ projectData }) => {
             fontSize: "1.2rem",
             marginBottom: "8px",
             color: "var(--text-primary)",
-            fontWeight: 700,
+            fontWeight: 600,
           }}
         >
           {project.name}

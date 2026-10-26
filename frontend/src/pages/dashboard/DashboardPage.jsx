@@ -1,13 +1,11 @@
 import React, { useEffect, useState } from "react";
-import { Plus, FolderKanban, Sparkles, RefreshCw } from "lucide-react";
+import { Plus, FolderKanban, RefreshCw } from "lucide-react";
 import { useProject } from "../../context/ProjectContext.jsx";
-import { useAuth } from "../../context/AuthContext.jsx";
 import { ProjectCard } from "../../components/projects/ProjectCard.jsx";
 import { CreateProjectModal } from "../../components/projects/CreateProjectModal.jsx";
 
 export const DashboardPage = () => {
   const { projects, loadingProjects, loadProjects } = useProject();
-  const { user } = useAuth();
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
   useEffect(() => {
@@ -35,24 +33,9 @@ export const DashboardPage = () => {
         }}
       >
         <div>
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: "8px",
-              color: "var(--primary-light)",
-              fontSize: "0.85rem",
-              fontWeight: 600,
-              marginBottom: "6px",
-            }}
-          >
-            <Sparkles size={16} />
-            <span>PROJECT WORKSPACE</span>
-          </div>
-          <h1>Welcome, {user?.fullName || user?.username}!</h1>
+          <h1>Your projects</h1>
           <p style={{ marginTop: "6px", fontSize: "0.95rem" }}>
-            Select an existing project or create a new team workspace to manage
-            tasks and notes.
+            Keep track of your team's tasks, notes, and progress.
           </p>
         </div>
 
@@ -114,8 +97,8 @@ export const DashboardPage = () => {
         <div
           style={{
             display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(320px, 1fr))",
-            gap: "24px",
+            gridTemplateColumns: "repeat(auto-fill, minmax(min(100%, 320px), 1fr))",
+            gap: "20px",
           }}
         >
           {projects.map((item, idx) => (
@@ -135,10 +118,10 @@ export const DashboardPage = () => {
         >
           <div
             style={{
-              width: "64px",
-              height: "64px",
-              borderRadius: "50%",
-              backgroundColor: "rgba(99, 102, 241, 0.12)",
+              width: "48px",
+              height: "48px",
+              borderRadius: "var(--radius-md)",
+              backgroundColor: "var(--bg-tertiary)",
               color: "var(--primary-light)",
               display: "flex",
               alignItems: "center",
@@ -146,10 +129,10 @@ export const DashboardPage = () => {
               margin: "0 auto 20px",
             }}
           >
-            <FolderKanban size={32} />
+            <FolderKanban size={24} />
           </div>
           <h3 style={{ fontSize: "1.3rem", marginBottom: "8px" }}>
-            No Projects Found
+            No projects yet
           </h3>
           <p
             style={{
@@ -158,16 +141,15 @@ export const DashboardPage = () => {
               fontSize: "0.9rem",
             }}
           >
-            You aren't a member of any projects yet. Create your first project
-            to get started as an Administrator.
+            Create a project to start organizing work with your team.
           </p>
           <button
             type="button"
-            className="btn btn-primary btn-lg"
+            className="btn btn-primary"
             onClick={() => setIsCreateModalOpen(true)}
           >
             <Plus size={18} />
-            <span>Create Your First Project</span>
+            <span>Create Project</span>
           </button>
         </div>
       )}
