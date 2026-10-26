@@ -44,19 +44,19 @@ The npm commands use that same **process-only** execution-policy override becaus
 
 ## Configuration and files
 
-| Item | Project-local value |
-| --- | --- |
-| Executable | `tools/mongodb/mongodb-win32-x86_64-windows-8.0.34/bin/mongod.exe` |
-| Archive and checksum | `tools/mongodb/mongodb-windows-x86_64-8.0.34.zip[.sha256]` |
-| Data | `.local/mongodb-data/` |
-| MongoDB log | `.local/mongodb-logs/mongod.log` |
-| Process output/errors | `.local/mongodb-logs/stdout.log`, `stderr.log` |
-| Generated runtime configuration | `.local/mongodb-runtime/mongod.cfg` (JSON-compatible YAML) |
-| Ownership record | `.local/mongodb-runtime/instance.json` |
-| Bind address / port | `127.0.0.1:27018` only |
-| Replica set / member | `rs0` / `127.0.0.1:27018` |
-| Test database | `pcb_test` |
-| WiredTiger cache | 0.25 GB |
+| Item                            | Project-local value                                                |
+| ------------------------------- | ------------------------------------------------------------------ |
+| Executable                      | `tools/mongodb/mongodb-win32-x86_64-windows-8.0.34/bin/mongod.exe` |
+| Archive and checksum            | `tools/mongodb/mongodb-windows-x86_64-8.0.34.zip[.sha256]`         |
+| Data                            | `.local/mongodb-data/`                                             |
+| MongoDB log                     | `.local/mongodb-logs/mongod.log`                                   |
+| Process output/errors           | `.local/mongodb-logs/stdout.log`, `stderr.log`                     |
+| Generated runtime configuration | `.local/mongodb-runtime/mongod.cfg` (JSON-compatible YAML)         |
+| Ownership record                | `.local/mongodb-runtime/instance.json`                             |
+| Bind address / port             | `127.0.0.1:27018` only                                             |
+| Replica set / member            | `rs0` / `127.0.0.1:27018`                                          |
+| Test database                   | `pcb_test`                                                         |
+| WiredTiger cache                | 0.25 GB                                                            |
 
 Add this non-secret test variable to the ignored project-root `.env` (already configured in this checkout):
 

@@ -22,7 +22,8 @@
     "mongodb:start": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Start",
     "mongodb:status": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Status",
     "mongodb:stop": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Stop",
-    "mongodb:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Smoke"
+    "mongodb:smoke": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/mongodb.ps1 Smoke",
+    "format": "prettier --write ."
   },
   "devDependencies": {
     "nodemon": "^3.1.14",

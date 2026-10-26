@@ -72,7 +72,7 @@ const userSchema = new Schema(
 );
 
 userSchema.pre("save", async function () {
-  if (!this.isModified("password")) return ; //if smt else then pass is change so dont hash our pass again and again , just on click save
+  if (!this.isModified("password")) return; //if smt else then pass is change so dont hash our pass again and again , just on click save
   this.password = await bcrypt.hash(this.password, 10);
   //now auto its go to next operation
 });
@@ -128,4 +128,3 @@ userSchema.methods.genrateTemporaryToken = function () {
 const user = mongoose.model("user", userSchema);
 export default user;
 //store user in userSchema form in mongodb and then export it as object:user to use
-

@@ -11,23 +11,37 @@ const app = express();
 
 // Keep parser provenance so a database/internal zlib error cannot become a 400.
 const requestParsingErrors = new WeakSet();
-const brotliFormatErrors = new Set(Object.entries(zlibConstants)
-  .filter(([name]) => name.startsWith("BROTLI_DECODER_ERROR_FORMAT_"))
-  .map(([, value]) => value));
-const parseBody = parser => (req, res, next) => parser(req, res, error => {
-  if (error) requestParsingErrors.add(error);
-  next(error);
-});
+const brotliFormatErrors = new Set(
+  Object.entries(zlibConstants)
+    .filter(([name]) => name.startsWith("BROTLI_DECODER_ERROR_FORMAT_"))
+    .map(([, value]) => value),
+);
+const parseBody = (parser) => (req, res, next) =>
+  parser(req, res, (error) => {
+    if (error) requestParsingErrors.add(error);
+    next(error);
+  });
 
-app.use(cookieParser());// now we have access to cookies in our request object and we can set cookies in our response object
+app.use(cookieParser()); // now we have access to cookies in our request object and we can set cookies in our response object
 
 // SameSite cookies plus an Origin check protect browser cookie-authenticated writes.
 app.use((req, res, next) => {
   const origin = req.get("Origin");
-  const allowed = (process.env.CORS_ORIGIN || "http://localhost:5173").split(",").map(value => value.trim());
-  if (origin && (req.cookies?.accessToken || req.cookies?.refreshToken)
-      && !["GET", "HEAD", "OPTIONS"].includes(req.method) && !allowed.includes(origin)) {
-    return next(new ApiError(403, "Origin is not allowed for cookie-authenticated writes"));
+  const allowed = (process.env.CORS_ORIGIN || "http://localhost:5173")
+    .split(",")
+    .map((value) => value.trim());
+  if (
+    origin &&
+    (req.cookies?.accessToken || req.cookies?.refreshToken) &&
+    !["GET", "HEAD", "OPTIONS"].includes(req.method) &&
+    !allowed.includes(origin)
+  ) {
+    return next(
+      new ApiError(
+        403,
+        "Origin is not allowed for cookie-authenticated writes",
+      ),
+    );
   }
   next();
 });
@@ -35,7 +49,9 @@ app.use((req, res, next) => {
 //cors configurations
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN?.split(",").map((origin) => origin.trim()) || "http://localhost:5173",
+    origin:
+      process.env.CORS_ORIGIN?.split(",").map((origin) => origin.trim()) ||
+      "http://localhost:5173",
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Authorization", "Content-Type"],
@@ -46,20 +62,22 @@ app.use(
 app.use(parseBody(express.json({ limit: "16kb" })));
 app.use(parseBody(express.urlencoded({ extended: true, limit: "16kb" })));
 
-app.use(express.static(fileURLToPath(new URL("../public/", import.meta.url)), {
-  dotfiles: "deny",
-  setHeaders(res) {
-    res.setHeader("X-Content-Type-Options", "nosniff");
-    res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
-    res.setHeader("Content-Disposition", "attachment");
-  },
-}));
+app.use(
+  express.static(fileURLToPath(new URL("../public/", import.meta.url)), {
+    dotfiles: "deny",
+    setHeaders(res) {
+      res.setHeader("X-Content-Type-Options", "nosniff");
+      res.setHeader("Content-Security-Policy", "default-src 'none'; sandbox");
+      res.setHeader("Content-Disposition", "attachment");
+    },
+  }),
+);
 
 // import routes
 import healthCheckRouter from "./routes/healthCheck_route.js";
-import authRouter from "./routes/auth.route.js"
+import authRouter from "./routes/auth.route.js";
 
-import projectRouter from "./routes/project.route.js"
+import projectRouter from "./routes/project.route.js";
 import taskRouter from "./routes/task.route.js";
 import noteRouter from "./routes/note.route.js";
 
@@ -67,9 +85,9 @@ app.use("/api/v1/healthcheck", healthCheckRouter);
 // we just add extra routing to our healthcheck
 // from "/" to "/api/v1/healthcheck/" and if add smt further route in router lets say we make an another router there with "/insta" then its become "/api/v1/healthcheck/insta"
 
-app.use("/api/v1/auth" , authRouter); //our auth router handler
+app.use("/api/v1/auth", authRouter); //our auth router handler
 
-app.use("/api/v1/projects",projectRouter); //our project router handler
+app.use("/api/v1/projects", projectRouter); //our project router handler
 app.use("/api/v1/tasks", taskRouter);
 app.use("/api/v1/notes", noteRouter);
 
@@ -78,6 +96,8 @@ app.get("/", (req, res) => {
 });
 
 app.use((req, res, next) => next(new ApiError(404, "Route not found")));
+
+// centralized error configuration for our app
 
 app.use(async (err, req, res, next) => {
   await cleanupUploads(req.files || []).catch(() => {
@@ -90,8 +110,17 @@ app.use(async (err, req, res, next) => {
   let errors = err instanceof ApiError ? err.errors : [];
 
   if (err.name === "MulterError") {
-    statusCode = ["LIMIT_FILE_SIZE", "LIMIT_FILE_COUNT", "LIMIT_PART_COUNT", "LIMIT_FIELD_COUNT", "LIMIT_FIELD_VALUE"].includes(err.code) ? 413 : 400;
-    message = "Upload exceeds the allowed size/count or uses an unsupported field";
+    statusCode = [
+      "LIMIT_FILE_SIZE",
+      "LIMIT_FILE_COUNT",
+      "LIMIT_PART_COUNT",
+      "LIMIT_FIELD_COUNT",
+      "LIMIT_FIELD_VALUE",
+    ].includes(err.code)
+      ? 413
+      : 400;
+    message =
+      "Upload exceeds the allowed size/count or uses an unsupported field";
   } else if (err instanceof URIError) {
     statusCode = 400;
     message = "Malformed URL";
@@ -110,13 +139,20 @@ app.use(async (err, req, res, next) => {
   } else if (err.type === "entity.too.large") {
     statusCode = 413;
     message = "Request body is too large";
-  } else if (requestParsingErrors.has(err) && ["charset.unsupported", "encoding.unsupported"].includes(err.type)) {
+  } else if (
+    requestParsingErrors.has(err) &&
+    ["charset.unsupported", "encoding.unsupported"].includes(err.type)
+  ) {
     statusCode = 415;
     message = "Unsupported request charset or content encoding";
-  } else if (requestParsingErrors.has(err) && err.status === 400 &&
-      (["Z_DATA_ERROR", "Z_BUF_ERROR"].includes(err.code) ||
-       (req.get("Content-Encoding")?.toLowerCase() === "br" && brotliFormatErrors.has(err.errno)) ||
-       ["request.aborted", "request.size.invalid"].includes(err.type))) {
+  } else if (
+    requestParsingErrors.has(err) &&
+    err.status === 400 &&
+    (["Z_DATA_ERROR", "Z_BUF_ERROR"].includes(err.code) ||
+      (req.get("Content-Encoding")?.toLowerCase() === "br" &&
+        brotliFormatErrors.has(err.errno)) ||
+      ["request.aborted", "request.size.invalid"].includes(err.type))
+  ) {
     statusCode = 400;
     message = "Invalid or incomplete request body";
   }

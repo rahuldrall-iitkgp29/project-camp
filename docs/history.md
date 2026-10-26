@@ -27,25 +27,25 @@ No dependency was added/upgraded, no PRD change, no production migration/deploym
 
 PCB is a project collaboration REST backend: accounts, project memberships and roles, tasks/subtasks, notes and public task attachments. Package name remains `project-mangement`, ES modules, version 1.0.0. Tested runtime: Node **24.14.0**, npm **11.9.0**. Installed stack includes Express **5.2.1**, Mongoose **9.7.3** (MongoDB driver **7.2.0**), bcrypt, jsonwebtoken, express-validator, Multer, Nodemailer/Mailgen, cookie-parser, CORS and dotenv. Installed dependency metadata requires Node at least **20.19.0**. Dependencies and lockfile were not changed.
 
-| Location | Responsibility |
-| --- | --- |
-| src/index.js | Loads dotenv before app evaluation, validates configuration, connects DB/initializes indexes, starts HTTP and attachment cleanup worker, handles shutdown. |
-| src/app.js | Importable Express app; parsers, cookies, Origin/CORS checks, static downloads, five route mounts, 404 and JSON error handling. Import itself opens no DB connection/listener. |
-| src/db/database.js | Application connection through MONGO_URI; requires replica set or sharded topology and successful model index initialization before serving. |
-| src/controllers/auth.controler.js | Ten account handlers, public projections, token/session lifecycle and notification flow. |
-| src/controllers/project.controlers.js | Project/member CRUD, invitations, acceptance, member counts, last-Admin and removal rules. |
-| src/controllers/task.controler.js | Five task and three subtask handlers, scoped relationships and attachment operations. |
-| src/controllers/note.controler.js; healthCheck.js | Five project-note handlers; liveness handler. |
-| src/routes/ | auth.route.js, project.route.js, task.route.js, note.route.js, healthCheck_route.js; actual methods/gates listed below. |
-| src/models/ | Eight Mongoose models described below. User is registered as lowercase user; references preserve that name. |
-| src/middlewares/ | auth.middleware.js, validtor.middleware.js, rateLimit.middleware.js, multer.middleware.js. |
-| src/validators/index.validatorts.js | Typed body, token and resource-ID validators; partial-update allowlists. |
-| src/utils/ | apiError.js, apiResponse.js, asyncHandler.js, constants.js, env.utils.js, mail.utils.js, project.utils.js, attachment.utils.js. |
-| tests/ | auth.test.js, project.test.js, contracts.test.js, mongodb-safety.test.js, integration.test.js; helpers/database.js mocks persistence; helpers/integration-lifecycle.js extends the real fixture. |
-| scripts/ | mongodb.ps1 lifecycle; mongodb-admin.js and lib/mongodb-test.js administration/isolation guard; dev-local.js explicit development launcher. |
-| public/images/ | Real public uploads; only gitkeep remained after test cleanup. |
-| tools/mongodb/; .local/ | Ignored local binaries, data, logs and runtime controls; no system service/PATH installation. |
-| docs/ | frontend-integration.md is the client/setup entrypoint; windows-mongodb.md documents the server; implementation-decisions.md preserves approved policies and updated DB status. |
+| Location                                          | Responsibility                                                                                                                                                                                   |
+| ------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| src/index.js                                      | Loads dotenv before app evaluation, validates configuration, connects DB/initializes indexes, starts HTTP and attachment cleanup worker, handles shutdown.                                       |
+| src/app.js                                        | Importable Express app; parsers, cookies, Origin/CORS checks, static downloads, five route mounts, 404 and JSON error handling. Import itself opens no DB connection/listener.                   |
+| src/db/database.js                                | Application connection through MONGO_URI; requires replica set or sharded topology and successful model index initialization before serving.                                                     |
+| src/controllers/auth.controler.js                 | Ten account handlers, public projections, token/session lifecycle and notification flow.                                                                                                         |
+| src/controllers/project.controlers.js             | Project/member CRUD, invitations, acceptance, member counts, last-Admin and removal rules.                                                                                                       |
+| src/controllers/task.controler.js                 | Five task and three subtask handlers, scoped relationships and attachment operations.                                                                                                            |
+| src/controllers/note.controler.js; healthCheck.js | Five project-note handlers; liveness handler.                                                                                                                                                    |
+| src/routes/                                       | auth.route.js, project.route.js, task.route.js, note.route.js, healthCheck_route.js; actual methods/gates listed below.                                                                          |
+| src/models/                                       | Eight Mongoose models described below. User is registered as lowercase user; references preserve that name.                                                                                      |
+| src/middlewares/                                  | auth.middleware.js, validtor.middleware.js, rateLimit.middleware.js, multer.middleware.js.                                                                                                       |
+| src/validators/index.validatorts.js               | Typed body, token and resource-ID validators; partial-update allowlists.                                                                                                                         |
+| src/utils/                                        | apiError.js, apiResponse.js, asyncHandler.js, constants.js, env.utils.js, mail.utils.js, project.utils.js, attachment.utils.js.                                                                  |
+| tests/                                            | auth.test.js, project.test.js, contracts.test.js, mongodb-safety.test.js, integration.test.js; helpers/database.js mocks persistence; helpers/integration-lifecycle.js extends the real fixture. |
+| scripts/                                          | mongodb.ps1 lifecycle; mongodb-admin.js and lib/mongodb-test.js administration/isolation guard; dev-local.js explicit development launcher.                                                      |
+| public/images/                                    | Real public uploads; only gitkeep remained after test cleanup.                                                                                                                                   |
+| tools/mongodb/; .local/                           | Ignored local binaries, data, logs and runtime controls; no system service/PATH installation.                                                                                                    |
+| docs/                                             | frontend-integration.md is the client/setup entrypoint; windows-mongodb.md documents the server; implementation-decisions.md preserves approved policies and updated DB status.                  |
 
 README.md was deliberately preserved as staged deleted. requiredThings.md still contains historical status that must not override measured results here; further discoverability/historical cleanup is D07.
 
@@ -55,41 +55,41 @@ All table paths are relative to **/api/v1**. Success bodies use **{ statuscode, 
 
 **JWT** means a valid current access token; email verification is not required for account actions. **Verified JWT** also requires verified email. Every project/task/subtask/note route uses verified JWT; **Any project role** means membership in that specific project. **Admin / Project Admin** means either per-project role; Member cannot mutate tasks. All 33 route registrations are checked by tests/contracts.test.js, with HTTP behavior in the auth/project suites and selected real-persistence cases in integration.test.js.
 
-| ID | Method and path | Controller | Access | Success / request → data |
-| --- | --- | --- | --- | --- |
-| R01 | POST /auth/register | registerUser | Public | 201: email, username, password → { user } |
-| R02 | POST /auth/login | login | Public | 200: email, password → user, accessToken, refreshToken |
-| R03 | POST /auth/logout | logoutUser | JWT | 200: no body → {} and cleared cookies |
-| R04 | GET /auth/current-user | getCurrentUser | JWT | 200: → public user |
-| R05 | POST /auth/change-password | changeCurrentPassword | JWT | 200: oldPassword, newPassword → {} |
-| R06 | POST /auth/refresh-token | refreshAccessToken | Refresh cookie/body | 200: refreshToken → accessToken, refreshToken, refrershToken |
-| R07 | GET /auth/verify-email/:verficationToken | verifyEmail | Public token | 200: → isEmailVerified |
-| R08 | POST /auth/forgot-Password | forgotPasswordRequest | Public | 200: email → {} |
-| R09 | POST /auth/reset-password/:resetToken | resetForgotPassword | Public token | 200: newPassword → {} |
-| R10 | POST /auth/resend-email-verification | resendEmailVerification | JWT | 200: no body → {} |
-| R11 | GET /projects | getProjects | Verified JWT | 200: → [{ project, role }] |
-| R12 | POST /projects | createProject | Verified JWT | 201: name, optional description → Project |
-| R13 | GET /projects/:projectId | getProjectById | Any project role | 200: → Project |
-| R14 | PUT /projects/:projectId | updateProject | Admin | 200: name and/or description → Project |
-| R15 | DELETE /projects/:projectId | deleteProject | Admin | 200: → deleted Project |
-| R16 | GET /projects/:projectId/members | getsProjectMembers | Any project role | 200: → [{ project, user, role, createdAt, updatedAt }] |
-| R17 | POST /projects/:projectId/members | addMemberToProject | Admin | 201: email, role → { invitation: pending details } |
-| R18 | PUT /projects/:projectId/members/:userId | updateMemberRole | Admin | 200: newRole → ProjectMember |
-| R19 | DELETE /projects/:projectId/members/:userId | deleteMember | Admin | 200: → deleted ProjectMember |
-| R20 | GET /tasks/:projectId | getTasks | Any project role | 200: → Task[] with public assignedTo |
-| R21 | POST /tasks/:projectId | createTask | Admin / Project Admin | 201: title; optional description, assignedTo, status, attachements → Task |
-| R22 | GET /tasks/:projectId/t/:taskId | getTaskById | Any project role | 200: → Task with public assignee and subtasks/creators |
-| R23 | PUT /tasks/:projectId/t/:taskId | updateTask | Admin / Project Admin | 200: partial task fields or appended uploads → Task |
-| R24 | DELETE /tasks/:projectId/t/:taskId | deleteTask | Admin / Project Admin | 200: → deleted Task |
-| R25 | POST /tasks/:projectId/t/:taskId/subtasks | createSubTask | Admin / Project Admin | 201: title → Subtask |
-| R26 | PUT /tasks/:projectId/st/:subTaskId | UpdateSubTask | Any role: completion; privileged: title | 200: title and/or boolean isCompleted → Subtask |
-| R27 | DELETE /tasks/:projectId/st/:subTaskId | deleteSubTask | Admin / Project Admin | 200: → deleted Subtask |
-| R28 | GET /notes/:projectId | getNotes | Any project role | 200: → ProjectNote[] with public createdBy |
-| R29 | POST /notes/:projectId | createNote | Admin | 201: content → ProjectNote |
-| R30 | GET /notes/:projectId/n/:noteId | getNoteById | Any project role | 200: → ProjectNote with public createdBy |
-| R31 | PUT /notes/:projectId/n/:noteId | updateNote | Admin | 200: content → ProjectNote |
-| R32 | DELETE /notes/:projectId/n/:noteId | deleteNote | Admin | 200: → deleted ProjectNote |
-| R33 | GET /healthcheck | healthCheck | Public | 200: → { message } |
+| ID  | Method and path                             | Controller              | Access                                  | Success / request → data                                                  |
+| --- | ------------------------------------------- | ----------------------- | --------------------------------------- | ------------------------------------------------------------------------- |
+| R01 | POST /auth/register                         | registerUser            | Public                                  | 201: email, username, password → { user }                                 |
+| R02 | POST /auth/login                            | login                   | Public                                  | 200: email, password → user, accessToken, refreshToken                    |
+| R03 | POST /auth/logout                           | logoutUser              | JWT                                     | 200: no body → {} and cleared cookies                                     |
+| R04 | GET /auth/current-user                      | getCurrentUser          | JWT                                     | 200: → public user                                                        |
+| R05 | POST /auth/change-password                  | changeCurrentPassword   | JWT                                     | 200: oldPassword, newPassword → {}                                        |
+| R06 | POST /auth/refresh-token                    | refreshAccessToken      | Refresh cookie/body                     | 200: refreshToken → accessToken, refreshToken, refrershToken              |
+| R07 | GET /auth/verify-email/:verficationToken    | verifyEmail             | Public token                            | 200: → isEmailVerified                                                    |
+| R08 | POST /auth/forgot-Password                  | forgotPasswordRequest   | Public                                  | 200: email → {}                                                           |
+| R09 | POST /auth/reset-password/:resetToken       | resetForgotPassword     | Public token                            | 200: newPassword → {}                                                     |
+| R10 | POST /auth/resend-email-verification        | resendEmailVerification | JWT                                     | 200: no body → {}                                                         |
+| R11 | GET /projects                               | getProjects             | Verified JWT                            | 200: → [{ project, role }]                                                |
+| R12 | POST /projects                              | createProject           | Verified JWT                            | 201: name, optional description → Project                                 |
+| R13 | GET /projects/:projectId                    | getProjectById          | Any project role                        | 200: → Project                                                            |
+| R14 | PUT /projects/:projectId                    | updateProject           | Admin                                   | 200: name and/or description → Project                                    |
+| R15 | DELETE /projects/:projectId                 | deleteProject           | Admin                                   | 200: → deleted Project                                                    |
+| R16 | GET /projects/:projectId/members            | getsProjectMembers      | Any project role                        | 200: → [{ project, user, role, createdAt, updatedAt }]                    |
+| R17 | POST /projects/:projectId/members           | addMemberToProject      | Admin                                   | 201: email, role → { invitation: pending details }                        |
+| R18 | PUT /projects/:projectId/members/:userId    | updateMemberRole        | Admin                                   | 200: newRole → ProjectMember                                              |
+| R19 | DELETE /projects/:projectId/members/:userId | deleteMember            | Admin                                   | 200: → deleted ProjectMember                                              |
+| R20 | GET /tasks/:projectId                       | getTasks                | Any project role                        | 200: → Task[] with public assignedTo                                      |
+| R21 | POST /tasks/:projectId                      | createTask              | Admin / Project Admin                   | 201: title; optional description, assignedTo, status, attachements → Task |
+| R22 | GET /tasks/:projectId/t/:taskId             | getTaskById             | Any project role                        | 200: → Task with public assignee and subtasks/creators                    |
+| R23 | PUT /tasks/:projectId/t/:taskId             | updateTask              | Admin / Project Admin                   | 200: partial task fields or appended uploads → Task                       |
+| R24 | DELETE /tasks/:projectId/t/:taskId          | deleteTask              | Admin / Project Admin                   | 200: → deleted Task                                                       |
+| R25 | POST /tasks/:projectId/t/:taskId/subtasks   | createSubTask           | Admin / Project Admin                   | 201: title → Subtask                                                      |
+| R26 | PUT /tasks/:projectId/st/:subTaskId         | UpdateSubTask           | Any role: completion; privileged: title | 200: title and/or boolean isCompleted → Subtask                           |
+| R27 | DELETE /tasks/:projectId/st/:subTaskId      | deleteSubTask           | Admin / Project Admin                   | 200: → deleted Subtask                                                    |
+| R28 | GET /notes/:projectId                       | getNotes                | Any project role                        | 200: → ProjectNote[] with public createdBy                                |
+| R29 | POST /notes/:projectId                      | createNote              | Admin                                   | 201: content → ProjectNote                                                |
+| R30 | GET /notes/:projectId/n/:noteId             | getNoteById             | Any project role                        | 200: → ProjectNote with public createdBy                                  |
+| R31 | PUT /notes/:projectId/n/:noteId             | updateNote              | Admin                                   | 200: content → ProjectNote                                                |
+| R32 | DELETE /notes/:projectId/n/:noteId          | deleteNote              | Admin                                   | 200: → deleted ProjectNote                                                |
+| R33 | GET /healthcheck                            | healthCheck             | Public                                  | 200: → { message }                                                        |
 
 Auth handlers live in auth.controler.js; project/member handlers in project.controlers.js; task/subtask handlers in task.controler.js; note handlers in note.controler.js; healthCheck in healthCheck.js.
 
@@ -113,16 +113,16 @@ Errors use **{ statusCode, data: null, success: false, message, errors }**, pres
 
 ## Models, integrity and business rules
 
-| Model / file | Relationships and important constraints |
-| --- | --- |
-| user / user.models.js | Unique trimmed email and unique lowercase username; bcrypt password; avatar, optional fullName, verification state, one saved refresh token, tokenVersion and hashed temporary tokens/expiry. |
-| Project / project.models.js | Unique project name globally, description and required createdBy → user. Project.__v is also touched to serialize project mutations. |
-| ProjectMember / projectmember.models.js | Required project → Project, user → user and role enum; unique (project,user), plus user/project lookup index. |
-| ProjectInvitation / projectInvitation.models.js | Project, exact email, role, invitedBy, hidden tokenHash and expiresAt; unique (project,email), TTL on expiry. Token expiry is checked explicitly, independently of TTL timing. |
-| Task / task.models.js | Required project, title; optional assignedTo/assignedBy → user; status, attachements array of url/mimeTypes/size; project/assignee index. |
-| Subtask / subtask.models.js | Required task → Task and createdBy → user; title, boolean isCompleted; task index. |
-| ProjectNote / note.models.js | Required project and createdBy → user, content; project index. |
-| FileDeletion / fileDeletion.models.js | Unique filename and timestamps; durable jobs for committed attachment deletion. |
+| Model / file                                    | Relationships and important constraints                                                                                                                                                       |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| user / user.models.js                           | Unique trimmed email and unique lowercase username; bcrypt password; avatar, optional fullName, verification state, one saved refresh token, tokenVersion and hashed temporary tokens/expiry. |
+| Project / project.models.js                     | Unique project name globally, description and required createdBy → user. Project.__v is also touched to serialize project mutations.                                                          |
+| ProjectMember / projectmember.models.js         | Required project → Project, user → user and role enum; unique (project,user), plus user/project lookup index.                                                                                 |
+| ProjectInvitation / projectInvitation.models.js | Project, exact email, role, invitedBy, hidden tokenHash and expiresAt; unique (project,email), TTL on expiry. Token expiry is checked explicitly, independently of TTL timing.                |
+| Task / task.models.js                           | Required project, title; optional assignedTo/assignedBy → user; status, attachements array of url/mimeTypes/size; project/assignee index.                                                     |
+| Subtask / subtask.models.js                     | Required task → Task and createdBy → user; title, boolean isCompleted; task index.                                                                                                            |
+| ProjectNote / note.models.js                    | Required project and createdBy → user, content; project index.                                                                                                                                |
+| FileDeletion / fileDeletion.models.js           | Unique filename and timestamps; durable jobs for committed attachment deletion.                                                                                                               |
 
 Previously approved policies remain in force: verified users may create a project and receive its Admin membership; roles are per project with no global override. Account actions remain available before email verification; collaboration resources require verification. Both new and existing users must accept emailed invitations. Attachments are deliberately public under the PRD. The detailed role matrix permits Member subtask completion, not general task mutation; no extra Member task-edit permission is inferred from less precise PRD prose.
 
@@ -156,16 +156,16 @@ Public downloads force attachment disposition, nosniff and sandbox CSP; URLs pro
 
 The table lists names only; actual secrets are never reproduced. Non-secret local frontend URLs above were explicitly selected by the user.
 
-| Names | Purpose |
-| --- | --- |
-| MONGO_URI | Application database only. Production/Atlas configuration remains separate from integration testing. |
-| MONGODB_TEST_URI | Dedicated isolated local pcb_test fixture/status connection; no fallback to application/legacy variables. |
-| PORT, NODE_ENV, CORS_ORIGIN | HTTP listening, production cookie/configuration behavior, approved browser origins. |
-| ACCESS_TOKEN_SECRET, ACCESS_TOKEN_EXPIRY | Access signing and duration. |
-| REFRESH_TOKEN_SECRET, REFRESH_TOKEN_EXPIRY | Distinct refresh signing and duration. |
-| SERVER_URL | Public API/attachment origin and verification links; invitation fallback. |
-| FORGOT_PASSWORD_REDIRECT_URL, PROJECT_INVITATION_REDIRECT_URL | Reset and optional invitation client landing URLs. |
-| MAILTRAP_SMTP_HOST, MAILTRAP_SMTP_PORT, MAILTRAP_SMTP_USER, MAILTRAP_SMTP_PASS, MAIL_FROM | SMTP connection/authentication and optional sender. |
+| Names                                                                                     | Purpose                                                                                                   |
+| ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------- |
+| MONGO_URI                                                                                 | Application database only. Production/Atlas configuration remains separate from integration testing.      |
+| MONGODB_TEST_URI                                                                          | Dedicated isolated local pcb_test fixture/status connection; no fallback to application/legacy variables. |
+| PORT, NODE_ENV, CORS_ORIGIN                                                               | HTTP listening, production cookie/configuration behavior, approved browser origins.                       |
+| ACCESS_TOKEN_SECRET, ACCESS_TOKEN_EXPIRY                                                  | Access signing and duration.                                                                              |
+| REFRESH_TOKEN_SECRET, REFRESH_TOKEN_EXPIRY                                                | Distinct refresh signing and duration.                                                                    |
+| SERVER_URL                                                                                | Public API/attachment origin and verification links; invitation fallback.                                 |
+| FORGOT_PASSWORD_REDIRECT_URL, PROJECT_INVITATION_REDIRECT_URL                             | Reset and optional invitation client landing URLs.                                                        |
+| MAILTRAP_SMTP_HOST, MAILTRAP_SMTP_PORT, MAILTRAP_SMTP_USER, MAILTRAP_SMTP_PASS, MAIL_FROM | SMTP connection/authentication and optional sender.                                                       |
 
 `validateEnvironment` checks required strings, HTTP URL form, Mongo URI scheme, ports, duration syntax and differing JWT secrets; production adds a minimum secret length. This is configuration validation, not a connectivity or entropy audit.
 
@@ -179,16 +179,16 @@ On valid startup, connectDB uses MONGO_URI, checks transactional topology and in
 
 Current status confirms the existing setup remains ready; no MongoDB lifecycle/setup action was necessary in this implementation:
 
-| Property | Verified state |
-| --- | --- |
-| Version/topology | Community 8.0.34; rs0, one member, PRIMARY, configuration version 1. |
-| Process/listener | PID 12456 at audit time; only 127.0.0.1:27018. PID is observational, not a future shutdown target. |
-| Executable | tools/mongodb/mongodb-win32-x86_64-windows-8.0.34/bin/mongod.exe |
-| Data | .local/mongodb-data/ |
-| Logs | .local/mongodb-logs/mongod.log; stdout.log and stderr.log in that directory. |
-| Runtime controls | .local/mongodb-runtime/mongod.cfg, instance.json and management/test locks. |
-| Test DB and configuration | pcb_test, selected only by MONGODB_TEST_URI; actual variable passed exact local guard without printing its value. |
-| Integrity | Retained archive SHA-256 recomputed: 6b021a0864494e4decf278b36477a29eb36072432773e4e62c2f42c302630db0; matches the pinned official checksum. |
+| Property                  | Verified state                                                                                                                               |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
+| Version/topology          | Community 8.0.34; rs0, one member, PRIMARY, configuration version 1.                                                                         |
+| Process/listener          | PID 12456 at audit time; only 127.0.0.1:27018. PID is observational, not a future shutdown target.                                           |
+| Executable                | tools/mongodb/mongodb-win32-x86_64-windows-8.0.34/bin/mongod.exe                                                                             |
+| Data                      | .local/mongodb-data/                                                                                                                         |
+| Logs                      | .local/mongodb-logs/mongod.log; stdout.log and stderr.log in that directory.                                                                 |
+| Runtime controls          | .local/mongodb-runtime/mongod.cfg, instance.json and management/test locks.                                                                  |
+| Test DB and configuration | pcb_test, selected only by MONGODB_TEST_URI; actual variable passed exact local guard without printing its value.                            |
+| Integrity                 | Retained archive SHA-256 recomputed: 6b021a0864494e4decf278b36477a29eb36072432773e4e62c2f42c302630db0; matches the pinned official checksum. |
 
 The prior setup records the official archive source as https://fastdl.mongodb.org/windows/mongodb-windows-x86_64-8.0.34.zip, with official checksum/release metadata verification before execution. It recorded Windows 11 x64 compatibility and existing Visual C++ runtime DLLs, with no system prerequisite installation. The preceding audit recomputed the official archive hash. This implementation reused that installation and verified current paths/configuration/PRIMARY without downloading anything. Mongoose 9.7.3 / driver 7.2.0 successfully ran the expanded fixture twice. Neither mongosh nor Database Tools is required.
 
@@ -222,20 +222,20 @@ The ignore rules cover local binaries/data/log/runtime paths and .env; .env.exam
 
 ## Tests, measured outcomes and limits
 
-| Command/check executed after implementation | Actual result |
-| --- | --- |
-| `npm.cmd test` | **57 passed / 0 failed / 0 skipped**, 2 suites; final run about 5.72 seconds. Existing B01–B30/33-route regressions remain passing. |
-| `npm.cmd run test:integration` | **6 passed / 0 failed / 0 skipped**, about 4.20 seconds; one parent fixture plus five named lifecycle subtests, not six independent fixtures. Expanded suite passed twice. |
-| `node --check` over src/tests/scripts | **44 files passed**, including all 34 application JS files. |
-| PowerShell Parser.ParseFile on scripts/mongodb.ps1 | Passed; existing script unchanged. |
-| Actual .env validateEnvironment and app-only import | Passed; Mongoose remains disconnected, import starts no listener. |
-| `node scripts/dev-local.js --check` | Actual local configuration and project replica-set verification passed without model writes. |
-| `npm.cmd run dev:local` | Normal src/index.js startup, index initialization and listener passed; health 200, no-auth 401, malformed JSON 400 and approved-origin credentialed CORS passed. |
-| Ctrl+C and listener check | API listener stopped. The interrupted npm batch wrapper exited 1; no startup failure occurred. MongoDB stayed running. |
-| `node scripts/mongodb-admin.js status` | Community 8.0.34, PID 12456, project paths, loopback and rs0 PRIMARY verified. |
-| Post-fixture read-only inspection | pcb_test zero collections; public/images only gitkeep; integration.lock absent. |
-| Read-only development DB inspection | pcb_development has eight initialized application collections/indexes and **zero records**. Fixture never uses it. |
-| `git diff --check`; `git diff --cached --check` | Passed. No lint/build scripts; no formatter, build, dependency install or advisory scan. |
+| Command/check executed after implementation         | Actual result                                                                                                                                                              |
+| --------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `npm.cmd test`                                      | **57 passed / 0 failed / 0 skipped**, 2 suites; final run about 5.72 seconds. Existing B01–B30/33-route regressions remain passing.                                        |
+| `npm.cmd run test:integration`                      | **6 passed / 0 failed / 0 skipped**, about 4.20 seconds; one parent fixture plus five named lifecycle subtests, not six independent fixtures. Expanded suite passed twice. |
+| `node --check` over src/tests/scripts               | **44 files passed**, including all 34 application JS files.                                                                                                                |
+| PowerShell Parser.ParseFile on scripts/mongodb.ps1  | Passed; existing script unchanged.                                                                                                                                         |
+| Actual .env validateEnvironment and app-only import | Passed; Mongoose remains disconnected, import starts no listener.                                                                                                          |
+| `node scripts/dev-local.js --check`                 | Actual local configuration and project replica-set verification passed without model writes.                                                                               |
+| `npm.cmd run dev:local`                             | Normal src/index.js startup, index initialization and listener passed; health 200, no-auth 401, malformed JSON 400 and approved-origin credentialed CORS passed.           |
+| Ctrl+C and listener check                           | API listener stopped. The interrupted npm batch wrapper exited 1; no startup failure occurred. MongoDB stayed running.                                                     |
+| `node scripts/mongodb-admin.js status`              | Community 8.0.34, PID 12456, project paths, loopback and rs0 PRIMARY verified.                                                                                             |
+| Post-fixture read-only inspection                   | pcb_test zero collections; public/images only gitkeep; integration.lock absent.                                                                                            |
+| Read-only development DB inspection                 | pcb_development has eight initialized application collections/indexes and **zero records**. Fixture never uses it.                                                         |
+| `git diff --check`; `git diff --cached --check`     | Passed. No lint/build scripts; no formatter, build, dependency install or advisory scan.                                                                                   |
 
 Initial sandbox attempts to run the unit and integration commands failed at Node worker creation with EPERM. Approved reruns executed the tests; only those completed runs supply the pass counts. There were no failing application tests after the fixes. The integration's injected cascade exception intentionally asserts 500 plus actual rollback and successful retry.
 
