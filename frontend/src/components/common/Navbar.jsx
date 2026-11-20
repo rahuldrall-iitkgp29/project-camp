@@ -1,12 +1,6 @@
 import React, { useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import {
-  Layers,
-  LogOut,
-  KeyRound,
-  AlertTriangle,
-  User,
-} from "lucide-react";
+import { Layers, LogOut, KeyRound, AlertTriangle, User } from "lucide-react";
 import { useAuth } from "../../context/AuthContext.jsx";
 import { ChangePasswordModal } from "./ChangePasswordModal.jsx";
 
@@ -76,7 +70,6 @@ export const Navbar = () => {
             </div>
             <span>Project Camp</span>
           </Link>
-
         </div>
 
         {/* Right: User State / Navigation */}

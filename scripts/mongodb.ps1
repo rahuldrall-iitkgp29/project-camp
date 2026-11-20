@@ -68,7 +68,20 @@ try {
         $publishedHash = ((Get-Content -LiteralPath $checksumPath -Raw) -split '\s+')[0]
         if ($publishedHash -ne $expectedHash) { throw 'Official checksum differs from pinned release metadata. Installation stopped.' }
         if (!(Test-Path -LiteralPath $archive)) { Invoke-WebRequest -UseBasicParsing -Uri $url -OutFile $archive -TimeoutSec 600 }
-        if ((Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash -ne $expectedHash) { throw 'Archive checksum mismatch. Do not run or extract it.' }
+        $sha256 = [System.Security.Cryptography.SHA256]::Create()
+        $fileStream = [System.IO.File]::OpenRead($archive)
+        try {
+            $actualHash = [BitConverter]::ToString(
+                $sha256.ComputeHash($fileStream)
+            ).Replace('-', '').ToLowerInvariant()
+        }
+        finally {
+            $fileStream.Dispose()
+            $sha256.Dispose()
+        }
+        if ($actualHash -ne $expectedHash) {
+            throw "Archive checksum mismatch. Expected: $expectedHash Actual: $actualHash"
+        }
         Expand-Archive -LiteralPath $archive -DestinationPath $toolsDirectory
         if (!(Test-Path -LiteralPath $executable)) { throw 'Official archive layout differs from the expected executable path.' }
         Write-Output "Verified and extracted MongoDB $version to $toolsDirectory"
@@ -118,3 +131,4 @@ try {
         $listeners | Select-Object LocalAddress, LocalPort, OwningProcess
     }
 } finally { $managementLock.Dispose() }
+

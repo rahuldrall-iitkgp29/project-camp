@@ -44,7 +44,7 @@
     "jsonwebtoken": "^9.0.3",
     "mailgen": "^2.0.36",
     "mongoose": "^9.7.3",
-    "mongosh": "^2.14.0",
+    "mongosh": "^2.14.3",
     "multer": "^2.3.0",
     "nodemailer": "^9.1.1"
   }
